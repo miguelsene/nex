@@ -223,3 +223,5 @@ npm run build
 cd /d "C:\Users\user\Downloads\nexa-videocall\videocall"
 start_public.batngrok version
 ngrok start --all --config "C:\Users\user\Downloads\nexa-videocall\videocall\ngrok.yml"
+
+https://nex-1-kkme.onrender.com
