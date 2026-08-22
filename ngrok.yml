@@ -1,0 +1,13 @@
+﻿version: "2"
+authtoken: 3IFMroD6X9uDZGwv3vtSGOH8U62_3uALYuuVrvLViUPBeVBxW
+tunnels:
+  videocall-frontend:
+    proto: http
+    addr: 5173
+  videocall-backend:
+    proto: http
+    addr: 4000
+
+
+
+

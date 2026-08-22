@@ -1,0 +1,57 @@
+:root {
+  /* --- Cores base --- */
+  --bg-void: #05060b;
+  --bg-base: #0a0d16;
+  --bg-elevated: #12162a;
+  --bg-elevated-2: #171c34;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+
+  /* --- Glass --- */
+  --glass-bg: rgba(20, 24, 46, 0.55);
+  --glass-bg-strong: rgba(23, 28, 52, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-blur: 18px;
+
+  /* --- Acento (gradiente assinatura: violeta -> ciano) --- */
+  --accent-violet: #7c5cfc;
+  --accent-violet-strong: #6842fb;
+  --accent-cyan: #22d3ee;
+  --accent-pink: #f472b6;
+  --gradient-aurora: linear-gradient(135deg, var(--accent-violet) 0%, #8b6bff 35%, var(--accent-cyan) 100%);
+  --gradient-aurora-soft: linear-gradient(135deg, rgba(124, 92, 252, 0.35), rgba(34, 211, 238, 0.25));
+
+  /* --- Semânticas --- */
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #ff4d6d;
+  --danger-strong: #ff2d55;
+
+  /* --- Texto --- */
+  --text-primary: #f5f6fb;
+  --text-secondary: #b9bfd6;
+  --text-muted: #7d84a0;
+
+  /* --- Tipografia --- */
+  --font-display: "Space Grotesk", "Inter", sans-serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* --- Raios e sombras --- */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-pill: 999px;
+  --shadow-soft: 0 8px 30px rgba(0, 0, 0, 0.35);
+  --shadow-glow-violet: 0 0 40px rgba(124, 92, 252, 0.35);
+  --shadow-glow-cyan: 0 0 40px rgba(34, 211, 238, 0.25);
+
+  /* --- Transições --- */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-fast: 150ms var(--ease-out);
+  --transition-base: 250ms var(--ease-out);
+
+  /* --- Layout --- */
+  --controlbar-height: 84px;
+  --sidebar-width: 340px;
+}
