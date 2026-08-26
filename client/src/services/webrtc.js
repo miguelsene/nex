@@ -12,6 +12,8 @@ export function createPeerConnection(iceServers, callbacks = {}) {
     iceServers: iceServers && iceServers.length ? iceServers : [
       { urls: "stun:stun.l.google.com:19302" },
     ],
+    bundlePolicy: "max-bundle",
+    rtcpMuxPolicy: "require",
   });
 
   pc.onicecandidate = (event) => {
@@ -33,6 +35,21 @@ export function createPeerConnection(iceServers, callbacks = {}) {
   };
 
   return pc;
+}
+
+/**
+ * Aplica preferência por Opus e bitrate alto no SDP para melhorar qualidade de áudio.
+ */
+export function optimizeAudioSdp(sdp) {
+  // Garante que Opus seja o codec preferido e configura parâmetros
+  return sdp
+    .replace(/a=fmtp:(\d+) (.*)\r\n/g, (match, pt, params) => {
+      if (sdp.includes(`a=rtpmap:${pt} opus`)) {
+        const base = params.replace(/stereo=\d/, "").replace(/maxaveragebitrate=\d+/, "").replace(/;;/g, ";").replace(/^;|;$/g, "");
+        return `a=fmtp:${pt} ${base ? base + ";" : ""}stereo=0;maxaveragebitrate=128000\r\n`;
+      }
+      return match;
+    });
 }
 
 /**

@@ -14,9 +14,33 @@ export default function VideoCard({
   const videoRef = useRef(null);
 
   useEffect(() => {
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
+    const video = videoRef.current;
+    if (!video) return;
+    if (stream) {
+      if (video.srcObject !== stream) {
+        video.srcObject = stream;
+      }
+      // Força re-play quando a stream muda de tracks (ex: compartilhamento de tela)
+      video.play().catch(() => {});
+    } else {
+      video.srcObject = null;
     }
+  }, [stream]);
+
+  // Re-attach quando as tracks da stream mudam (câmera -> tela e vice-versa)
+  useEffect(() => {
+    if (!stream) return;
+    const video = videoRef.current;
+    const onAddTrack = () => {
+      if (video && video.srcObject !== stream) video.srcObject = stream;
+      video?.play().catch(() => {});
+    };
+    stream.addEventListener("addtrack", onAddTrack);
+    stream.addEventListener("removetrack", onAddTrack);
+    return () => {
+      stream.removeEventListener("addtrack", onAddTrack);
+      stream.removeEventListener("removetrack", onAddTrack);
+    };
   }, [stream]);
 
   useEffect(() => {

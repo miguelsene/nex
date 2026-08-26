@@ -15,6 +15,7 @@ export function useMediaDevices() {
 
   const cameraStreamRef = useRef(null); // guarda a track de câmera original enquanto compartilha tela
   const screenStreamRef = useRef(null);
+  const savedCameraTrackRef = useRef(null); // track de câmera salva antes do screen share
 
   const refreshDeviceList = useCallback(async () => {
     try {
@@ -39,8 +40,15 @@ export function useMediaDevices() {
           throw new Error("Este navegador não suporta acesso a câmera/microfone.");
         }
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 48000,
+            channelCount: 1,
+            latency: 0,
+          },
         });
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
@@ -154,21 +162,30 @@ export function useMediaDevices() {
         return null;
       }
       const screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
+        video: { frameRate: { ideal: 30 }, width: { ideal: 1920 }, height: { ideal: 1080 } },
         audio: false,
       });
       screenStreamRef.current = screenStream;
-      setIsSharingScreen(true);
 
       const screenTrack = screenStream.getVideoTracks()[0];
-      // Se o usuário parar o compartilhamento pelo próprio painel do navegador
+
+      // Substitui a track de vídeo no stream local para o preview local também mostrar a tela
+      const oldVideoTrack = cameraStreamRef.current?.getVideoTracks()[0];
+      if (oldVideoTrack) {
+        savedCameraTrackRef.current = oldVideoTrack; // salva para restaurar depois
+        cameraStreamRef.current.removeTrack(oldVideoTrack);
+      }
+      cameraStreamRef.current.addTrack(screenTrack);
+      setLocalStream(new MediaStream(cameraStreamRef.current.getTracks()));
+      setIsSharingScreen(true);
+
+      // Se o usuário parar pelo painel do navegador
       screenTrack.addEventListener("ended", () => {
         stopScreenShare();
       });
 
       return screenTrack;
     } catch {
-      // Usuário cancelou o seletor de tela — não é um erro real
       return null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -176,9 +193,23 @@ export function useMediaDevices() {
 
   const stopScreenShare = useCallback(() => {
     screenStreamRef.current?.getTracks().forEach((t) => t.stop());
+
+    // Remove a track de tela do stream local
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getVideoTracks().forEach((t) => cameraStreamRef.current.removeTrack(t));
+      // Restaura a track de câmera original
+      if (savedCameraTrackRef.current) {
+        cameraStreamRef.current.addTrack(savedCameraTrackRef.current);
+        savedCameraTrackRef.current = null;
+      }
+    }
+
     screenStreamRef.current = null;
     setIsSharingScreen(false);
-    return cameraStreamRef.current?.getVideoTracks()[0] || null;
+
+    const originalCameraTrack = cameraStreamRef.current?.getVideoTracks()[0] || null;
+    setLocalStream(new MediaStream(cameraStreamRef.current?.getTracks() || []));
+    return originalCameraTrack;
   }, []);
 
   return {

@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createRoom } from "../services/api.js";
 import { validateName } from "../utils/format.js";
+import { useAuth } from "../hooks/useAuth.jsx";
+import ThemePicker from "../components/ThemePicker.jsx";
 
 const FEATURES = [
   {
@@ -31,10 +33,14 @@ export default function Home() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
+  // Preenche o nome automaticamente se estiver logado
+  const effectiveName = user ? user.name : name;
 
   async function handleCreateRoom(e) {
     e.preventDefault();
-    const validationError = validateName(name);
+    const validationError = validateName(effectiveName);
     if (validationError) {
       setError(validationError);
       return;
@@ -43,7 +49,7 @@ export default function Home() {
     setLoading(true);
     try {
       const { roomId } = await createRoom();
-      navigate(`/room/${roomId}`, { state: { name: name.trim() } });
+      navigate(`/room/${roomId}`, { state: { name: effectiveName.trim() } });
     } catch {
       setError("Não foi possível criar a sala. Verifique se o servidor está rodando.");
       setLoading(false);
@@ -66,9 +72,26 @@ export default function Home() {
           </span>
           Nexa
         </div>
+        <ThemePicker />
         <nav>
           <a href="#features">Recursos</a>
-          <span>Sem cadastro. Sem instalação.</span>
+          {user ? (
+            <div className="header-user">
+              {user.avatar
+                ? <img src={user.avatar} alt={user.name} className="header-avatar" />
+                : <div className="header-avatar-initials">{user.name.slice(0, 2).toUpperCase()}</div>
+              }
+              <span className="header-username">{user.name}</span>
+              <a href="/dashboard" className="btn-ghost-sm" style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <i className="bi bi-grid" /> Painel
+              </a>
+              <button className="btn-ghost-sm" onClick={logout}>Sair</button>
+            </div>
+          ) : (
+            <a href="/auth" className="btn btn-ghost" style={{ padding: "8px 18px", fontSize: "0.85rem" }}>
+              <i className="bi bi-person-circle" /> Entrar
+            </a>
+          )}
         </nav>
       </header>
 
@@ -91,14 +114,18 @@ export default function Home() {
           <div className="input-row">
             <div className="name-input-wrap">
               <i className="bi bi-person" />
-              <input
-                type="text"
-                placeholder="Como podemos te chamar?"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={40}
-                autoFocus
-              />
+              {user ? (
+                <span style={{ flex: 1, padding: "14px 0", color: "var(--text-primary)" }}>{user.name}</span>
+              ) : (
+                <input
+                  type="text"
+                  placeholder="Como podemos te chamar?"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  maxLength={40}
+                  autoFocus
+                />
+              )}
             </div>
           </div>
 

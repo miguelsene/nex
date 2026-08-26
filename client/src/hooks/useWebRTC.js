@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createPeerConnection } from "../services/webrtc.js";
+import { createPeerConnection, optimizeAudioSdp } from "../services/webrtc.js";
 
 /**
  * Orquestra toda a chamada: entra na sala via Socket.IO, cria uma
@@ -137,7 +137,8 @@ export function useWebRTC({ socket, roomId, name, localStream, iceServers, onEve
       attachLocalTracks(pc);
       try {
         const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
+        const optimized = new RTCSessionDescription({ type: offer.type, sdp: optimizeAudioSdp(offer.sdp) });
+        await pc.setLocalDescription(optimized);
         socket.emit("offer", { to: remoteId, offer: pc.localDescription });
       } catch {
         // Falha ao negociar com este participante — não derruba a chamada inteira
@@ -193,7 +194,8 @@ export function useWebRTC({ socket, roomId, name, localStream, iceServers, onEve
         await pc.setRemoteDescription(offer);
         await flushPendingCandidates(from, pc);
         const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
+        const optimized = new RTCSessionDescription({ type: answer.type, sdp: optimizeAudioSdp(answer.sdp) });
+        await pc.setLocalDescription(optimized);
         socket.emit("answer", { to: from, answer: pc.localDescription });
       } catch {
         // Ignora falha de negociação pontual

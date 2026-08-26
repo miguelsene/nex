@@ -2,11 +2,18 @@ import "dotenv/config";
 import express from "express";
 import http from "http";
 import cors from "cors";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Server } from "socket.io";
 
 import { roomManager } from "./rooms/roomManager.js";
 import { registerSocketHandlers } from "./socket/socketHandler.js";
 import { getIceServers } from "./signaling/iceConfig.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const clientDistPath = path.resolve(__dirname, "../../client/dist");
 
 const PORT = process.env.PORT || 4000;
 const CLIENT_URLS = (process.env.CLIENT_URL || "http://localhost:5173")
@@ -66,6 +73,18 @@ app.get("/api/rooms/:roomId", (req, res) => {
   const exists = roomManager.roomExists(roomId.toUpperCase());
   res.json({ exists });
 });
+
+if (fs.existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath));
+
+  app.get(/^(?!\/api\/|\/socket\.io).*/, (req, res, next) => {
+    if (req.path.startsWith("/api/") || req.path.startsWith("/socket.io")) {
+      return next();
+    }
+
+    res.sendFile(path.join(clientDistPath, "index.html"));
+  });
+}
 
 const server = http.createServer(app);
 

@@ -8,6 +8,8 @@ import { useMediaDevices } from "../hooks/useMediaDevices.js";
 import { useSocket } from "../hooks/useSocket.js";
 import { useWebRTC } from "../hooks/useWebRTC.js";
 import { useSpeakingDetector } from "../hooks/useSpeakingDetector.js";
+import { useAuth } from "../hooks/useAuth.jsx";
+import { saveCallRecord } from "../services/social.js";
 
 import VideoGrid from "../components/VideoGrid.jsx";
 import CallControls from "../components/CallControls.jsx";
@@ -15,6 +17,7 @@ import ParticipantList from "../components/ParticipantList.jsx";
 import Chat from "../components/Chat.jsx";
 import InviteModal from "../components/InviteModal.jsx";
 import SettingsModal from "../components/SettingsModal.jsx";
+import ThemePicker from "../components/ThemePicker.jsx";
 
 export default function Room() {
   const { roomId } = useParams();
@@ -39,6 +42,8 @@ function JoinScreen({ roomId, onJoined }) {
   const [error, setError] = useState(null);
   const [checking, setChecking] = useState(true);
   const [roomFound, setRoomFound] = useState(true);
+  const navigate = useNavigate();
+  const { user } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
@@ -59,12 +64,10 @@ function JoinScreen({ roomId, onJoined }) {
 
   function handleSubmit(e) {
     e.preventDefault();
-    const validationError = validateName(name);
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-    onJoined(name.trim());
+    const nameToUse = user ? user.name : name;
+    const validationError = validateName(nameToUse);
+    if (validationError) { setError(validationError); return; }
+    onJoined(nameToUse.trim());
   }
 
   return (
@@ -76,6 +79,9 @@ function JoinScreen({ roomId, onJoined }) {
 
       <div className="join-screen">
         <div className="join-card glass-card">
+          <button className="btn-ghost-sm" onClick={() => navigate(-1)} style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 6 }}>
+            <i className="bi bi-arrow-left" /> Voltar
+          </button>
           <div className="room-badge">
             <i className="bi bi-camera-video-fill" /> Sala {roomId?.toUpperCase()}
           </div>
@@ -94,17 +100,25 @@ function JoinScreen({ roomId, onJoined }) {
 
           {(!checking && roomFound) && (
             <form onSubmit={handleSubmit} style={{ width: "100%", display: "flex", flexDirection: "column", gap: "14px" }}>
-              <div className="name-input-wrap">
-                <i className="bi bi-person" />
-                <input
-                  type="text"
-                  placeholder="Digite seu nome"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  maxLength={40}
-                  autoFocus
-                />
-              </div>
+              {!user && (
+                <div className="name-input-wrap">
+                  <i className="bi bi-person" />
+                  <input
+                    type="text"
+                    placeholder="Digite seu nome"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    maxLength={40}
+                    autoFocus
+                  />
+                </div>
+              )}
+              {user && (
+                <div className="name-input-wrap">
+                  <i className="bi bi-person-check" />
+                  <span style={{ flex: 1, padding: "14px 0", color: "var(--text-primary)" }}>{user.name}</span>
+                </div>
+              )}
               {error && <div className="error-text">{error}</div>}
               <button type="submit" className="btn btn-primary">
                 <i className="bi bi-box-arrow-in-right" /> Entrar na chamada
@@ -130,6 +144,8 @@ function JoinScreen({ roomId, onJoined }) {
 function CallExperience({ roomId, name }) {
   const navigate = useNavigate();
   const normalizedRoomId = roomId.toUpperCase();
+  const { user } = useAuth();
+  const callStartRef = useRef(Date.now());
 
   const media = useMediaDevices();
   const { socket, connectionState } = useSocket();
@@ -245,6 +261,15 @@ function CallExperience({ roomId, name }) {
   }
 
   function handleLeave() {
+    const durationSeconds = Math.floor((Date.now() - callStartRef.current) / 1000);
+    const participantNames = Array.from(webrtc.participants.values()).map((p) => p.name);
+    if (user) {
+      saveCallRecord(user.id, {
+        roomId: normalizedRoomId,
+        participants: participantNames,
+        durationSeconds,
+      });
+    }
     socket.emit("leave-room");
     socket.disconnect();
     navigate("/");
@@ -326,6 +351,7 @@ function CallExperience({ roomId, name }) {
         </div>
 
         <div className="room-meta">
+          <ThemePicker />
           <div className="room-code-pill">
             <i className="bi bi-hash" />
             <span className="code-label">Sala</span> {normalizedRoomId}
