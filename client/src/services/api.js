@@ -19,3 +19,13 @@ export function checkRoomExists(roomId) {
 export function fetchIceConfig() {
   return request("/api/ice-config");
 }
+
+// Acorda serviços que entram em repouso (por exemplo, hospedagens gratuitas)
+// enquanto a pessoa ainda está na tela inicial, sem bloquear a interface.
+export function warmUpServer() {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 8000);
+  return fetch(`${SERVER_HTTP_URL}/api/health`, { signal: controller.signal })
+    .catch(() => null)
+    .finally(() => window.clearTimeout(timeout));
+}

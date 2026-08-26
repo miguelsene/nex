@@ -40,14 +40,15 @@ export function useMediaDevices() {
           throw new Error("Este navegador não suporta acesso a câmera/microfone.");
         }
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+          // Uma configuração inicial mais leve abre a câmera mais depressa,
+          // especialmente em celulares e notebooks mais modestos.
+          video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 24 } },
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
             autoGainControl: true,
             sampleRate: 48000,
             channelCount: 1,
-            latency: 0,
           },
         });
         if (cancelled) {
