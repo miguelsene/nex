@@ -10,7 +10,7 @@ import { createPeerConnection, optimizeAudioSdp } from "../services/webrtc.js";
  * quem ACABOU de entrar é sempre quem inicia a offer para os participantes
  * que já estavam na sala. Quem já estava na sala apenas responde.
  */
-export function useWebRTC({ socket, roomId, name, localStream, iceServers, onEvent }) {
+export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, iceServers, onEvent }) {
   const [joined, setJoined] = useState(false);
   const [joinError, setJoinError] = useState(null);
   const [selfId, setSelfId] = useState(null);
@@ -39,7 +39,7 @@ export function useWebRTC({ socket, roomId, name, localStream, iceServers, onEve
   const updateParticipant = useCallback((id, patch) => {
     setParticipants((prev) => {
       const next = new Map(prev);
-      const current = next.get(id) || { id, name: "Convidado", micOn: true, camOn: true, isSharingScreen: false, stream: null, speaking: false };
+      const current = next.get(id) || { id, name: "Convidado", avatar: null, userId: null, micOn: true, camOn: true, isSharingScreen: false, stream: null, speaking: false };
       next.set(id, { ...current, ...patch });
       return next;
     });
@@ -112,6 +112,8 @@ export function useWebRTC({ socket, roomId, name, localStream, iceServers, onEve
       updateParticipant(remoteId, {
         id: remoteId,
         name: remoteMeta?.name || "Convidado",
+        avatar: remoteMeta?.avatar || null,
+        userId: remoteMeta?.userId || null,
         micOn: remoteMeta?.micOn ?? true,
         camOn: remoteMeta?.camOn ?? true,
         isSharingScreen: remoteMeta?.isSharingScreen ?? false,
@@ -152,7 +154,7 @@ export function useWebRTC({ socket, roomId, name, localStream, iceServers, onEve
     if (!socket || !roomId || !name || !localStream) return;
     let cancelled = false;
 
-    socket.emit("join-room", { roomId, name }, async (response) => {
+    socket.emit("join-room", { roomId, name, avatar, userId }, async (response) => {
       if (cancelled) return;
       if (!response?.ok) {
         setJoinError(response?.error || "Não foi possível entrar na sala.");

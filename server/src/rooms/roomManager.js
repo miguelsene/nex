@@ -67,7 +67,7 @@ function ensureRoom(id) {
   return room;
 }
 
-function addParticipant(roomId, socketId, name) {
+function addParticipant(roomId, socketId, name, avatar, userId) {
   const room = ensureRoom(roomId);
   if (!room) return null;
 
@@ -77,10 +77,14 @@ function addParticipant(roomId, socketId, name) {
   }
 
   const safeName = String(name || "Convidado").trim().slice(0, 40) || "Convidado";
+  const safeAvatar = typeof avatar === "string" && avatar.length < 20000 ? avatar : null;
+  const safeUserId = typeof userId === "string" && userId.length < 100 ? userId : null;
 
   const participant = {
     id: socketId,
     name: safeName,
+    avatar: safeAvatar,
+    userId: safeUserId,
     micOn: true,
     camOn: true,
     isSharingScreen: false,

@@ -11,6 +11,7 @@ export default function VideoGrid({ self, remoteParticipants, speakerId }) {
           key={p.id}
           stream={p.stream}
           name={p.name}
+          avatar={p.avatar || null}
           isLocal={p.isLocal}
           micOn={p.micOn}
           camOn={p.camOn}

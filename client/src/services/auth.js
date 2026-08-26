@@ -35,17 +35,25 @@ export function logout() {
   localStorage.removeItem(SESSION_KEY);
 }
 
+function generateFriendId() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let id = "";
+  for (let i = 0; i < 8; i++) id += chars[Math.floor(Math.random() * chars.length)];
+  return id;
+}
+
 export async function register({ name, email, password, avatarDataUrl }) {
   const users = getUsers();
   const key = email.toLowerCase().trim();
   if (users[key]) return { ok: false, error: "Este e-mail já está cadastrado." };
 
   const hash = await hashPassword(password);
-  const user = { id: crypto.randomUUID(), name: name.trim(), email: key, hash, avatar: avatarDataUrl || null };
+  const friendId = generateFriendId();
+  const user = { id: crypto.randomUUID(), friendId, name: name.trim(), email: key, hash, avatar: avatarDataUrl || null };
   users[key] = user;
   saveUsers(users);
 
-  const session = { id: user.id, name: user.name, email: user.email, avatar: user.avatar };
+  const session = { id: user.id, friendId: user.friendId, name: user.name, email: user.email, avatar: user.avatar };
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   return { ok: true, user: session };
 }
@@ -56,10 +64,17 @@ export async function login({ email, password }) {
   const user = users[key];
   if (!user) return { ok: false, error: "E-mail não encontrado." };
 
+  // Migrar contas antigas sem friendId
+  if (!user.friendId) {
+    user.friendId = generateFriendId();
+    users[key] = user;
+    saveUsers(users);
+  }
+
   const hash = await hashPassword(password);
   if (hash !== user.hash) return { ok: false, error: "Senha incorreta." };
 
-  const session = { id: user.id, name: user.name, email: user.email, avatar: user.avatar };
+  const session = { id: user.id, friendId: user.friendId, name: user.name, email: user.email, avatar: user.avatar };
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   return { ok: true, user: session };
 }
@@ -80,4 +95,12 @@ export async function updateProfile({ name, avatarDataUrl }) {
   const updated = { ...session, name: user.name, avatar: user.avatar };
   localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
   return { ok: true, user: updated };
+}
+
+/** Busca usuário pelo friendId público */
+export function getUserByFriendId(friendId) {
+  const users = getUsers();
+  const found = Object.values(users).find((u) => u.friendId === friendId.toUpperCase().trim());
+  if (!found) return null;
+  return { id: found.id, friendId: found.friendId, name: found.name, avatar: found.avatar || null };
 }

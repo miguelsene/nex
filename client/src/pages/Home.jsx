@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createRoom } from "../services/api.js";
 import { validateName } from "../utils/format.js";
@@ -6,45 +6,40 @@ import { useAuth } from "../hooks/useAuth.jsx";
 import ThemePicker from "../components/ThemePicker.jsx";
 
 const FEATURES = [
-  {
-    icon: "bi-camera-video-fill",
-    title: "Vídeo em tempo real",
-    desc: "Chamadas fluidas direto do navegador, sem instalar nada.",
-  },
-  {
-    icon: "bi-mic-fill",
-    title: "Áudio nítido",
-    desc: "Cancelamento de ruído e ajuste automático de ganho.",
-  },
-  {
-    icon: "bi-display",
-    title: "Compartilhamento de tela",
-    desc: "Mostre sua tela inteira, uma janela ou uma aba do navegador.",
-  },
-  {
-    icon: "bi-link-45deg",
-    title: "Convites por link",
-    desc: "Crie a sala e envie um link. Ninguém precisa criar conta.",
-  },
+  { icon: "bi-camera-video-fill", title: "Vídeo em tempo real", desc: "Chamadas fluidas direto do navegador, sem instalar nada." },
+  { icon: "bi-mic-fill", title: "Áudio nítido", desc: "Cancelamento de ruído e ajuste automático de ganho." },
+  { icon: "bi-display", title: "Compartilhamento de tela", desc: "Mostre sua tela inteira, uma janela ou uma aba do navegador." },
+  { icon: "bi-link-45deg", title: "Convites por link", desc: "Crie a sala e envie um link. Ninguém precisa criar conta." },
 ];
 
 export default function Home() {
   const [name, setName] = useState("");
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [joinCode, setJoinCode] = useState("");
+  const [joinError, setJoinError] = useState(null);
+  const [lastRoom, setLastRoom] = useState(null);
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
-  // Preenche o nome automaticamente se estiver logado
   const effectiveName = user ? user.name : name;
+
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem("nexa_last_room");
+      if (stored) {
+        const data = JSON.parse(stored);
+        // Só mostra se saiu há menos de 2 horas
+        if (Date.now() - data.at < 7200000) setLastRoom(data);
+        else sessionStorage.removeItem("nexa_last_room");
+      }
+    } catch {}
+  }, []);
 
   async function handleCreateRoom(e) {
     e.preventDefault();
     const validationError = validateName(effectiveName);
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
+    if (validationError) { setError(validationError); return; }
     setError(null);
     setLoading(true);
     try {
@@ -56,6 +51,23 @@ export default function Home() {
     }
   }
 
+  function handleJoinByCode(e) {
+    e.preventDefault();
+    const code = joinCode.trim().toUpperCase();
+    if (!code || code.length < 4) { setJoinError("Digite um código válido."); return; }
+    setJoinError(null);
+    if (user) {
+      navigate(`/room/${code}`, { state: { name: user.name } });
+    } else {
+      navigate(`/room/${code}`);
+    }
+  }
+
+  function handleRejoin() {
+    if (!lastRoom) return;
+    navigate(`/room/${lastRoom.roomId}`, { state: { name: lastRoom.name } });
+  }
+
   return (
     <div className="home">
       <div className="aurora-bg" aria-hidden="true">
@@ -65,11 +77,27 @@ export default function Home() {
         <div className="aurora-grid" />
       </div>
 
+      {/* Barra de entrar por código — topo */}
+      <div className="join-code-bar">
+        <form className="join-code-form" onSubmit={handleJoinByCode}>
+          <i className="bi bi-hash" />
+          <input
+            type="text"
+            placeholder="Código da sala"
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+            maxLength={10}
+          />
+          <button type="submit" className="btn btn-primary" style={{ padding: "7px 16px", fontSize: "0.82rem" }}>
+            Entrar
+          </button>
+        </form>
+        {joinError && <span className="join-code-error">{joinError}</span>}
+      </div>
+
       <header className="home-header">
         <div className="brand">
-          <span className="brand-mark">
-            <i className="bi bi-broadcast" />
-          </span>
+          <span className="brand-mark"><i className="bi bi-broadcast" /></span>
           Nexa
         </div>
         <ThemePicker />
@@ -94,6 +122,20 @@ export default function Home() {
           )}
         </nav>
       </header>
+
+      {/* Banner voltar para sala */}
+      {lastRoom && (
+        <div className="rejoin-banner glass-card">
+          <i className="bi bi-camera-video-fill" style={{ color: "var(--accent-cyan)" }} />
+          <span>Você saiu da sala <strong>{lastRoom.roomId}</strong>. Ainda quer voltar?</span>
+          <button className="btn btn-primary" style={{ padding: "7px 16px", fontSize: "0.82rem" }} onClick={handleRejoin}>
+            Voltar para sala
+          </button>
+          <button className="icon-btn" onClick={() => { setLastRoom(null); sessionStorage.removeItem("nexa_last_room"); }}>
+            <i className="bi bi-x" />
+          </button>
+        </div>
+      )}
 
       <main className="hero">
         <div className="hero-eyebrow">
@@ -132,15 +174,7 @@ export default function Home() {
           {error && <div className="error-text">{error}</div>}
 
           <button type="submit" className="btn btn-primary" disabled={loading}>
-            {loading ? (
-              <>
-                <i className="bi bi-arrow-repeat" /> Criando sala...
-              </>
-            ) : (
-              <>
-                <i className="bi bi-plus-circle-fill" /> Criar sala
-              </>
-            )}
+            {loading ? <><i className="bi bi-arrow-repeat" /> Criando sala...</> : <><i className="bi bi-plus-circle-fill" /> Criar sala</>}
           </button>
 
           <span className="hero-hint">Você poderá copiar o link e enviar para seus amigos.</span>
@@ -150,9 +184,7 @@ export default function Home() {
       <section className="features" id="features">
         {FEATURES.map((f) => (
           <div className="feature-card glass-card" key={f.title}>
-            <div className="feature-icon">
-              <i className={`bi ${f.icon}`} />
-            </div>
+            <div className="feature-icon"><i className={`bi ${f.icon}`} /></div>
             <h3>{f.title}</h3>
             <p>{f.desc}</p>
           </div>

@@ -9,7 +9,7 @@ import { useSocket } from "../hooks/useSocket.js";
 import { useWebRTC } from "../hooks/useWebRTC.js";
 import { useSpeakingDetector } from "../hooks/useSpeakingDetector.js";
 import { useAuth } from "../hooks/useAuth.jsx";
-import { saveCallRecord } from "../services/social.js";
+import { saveCallRecord, sendFriendRequest, getContacts } from "../services/social.js";
 
 import VideoGrid from "../components/VideoGrid.jsx";
 import CallControls from "../components/CallControls.jsx";
@@ -186,6 +186,8 @@ function CallExperience({ roomId, name }) {
     socket,
     roomId: normalizedRoomId,
     name,
+    avatar: user?.avatar || null,
+    userId: user?.id || null,
     localStream: media.localStream,
     iceServers,
     onEvent: handleCallEvent,
@@ -270,9 +272,24 @@ function CallExperience({ roomId, name }) {
         durationSeconds,
       });
     }
+    // Guarda sala ativa para poder voltar
+    sessionStorage.setItem("nexa_last_room", JSON.stringify({ roomId: normalizedRoomId, name, at: Date.now() }));
     socket.emit("leave-room");
     socket.disconnect();
     navigate("/");
+  }
+
+  function handleAddFriend(participant) {
+    if (!user) { pushToast("Faça login para adicionar amigos."); return; }
+    if (!participant.userId) { pushToast("Este participante não tem conta Nexa."); return; }
+    const contacts = getContacts(user.id);
+    if (contacts.find((c) => c.id === participant.userId)) { pushToast(`${participant.name} já é seu contato.`); return; }
+    const result = sendFriendRequest(
+      { id: user.id, name: user.name, avatar: user.avatar || null },
+      participant.userId
+    );
+    if (result.ok) pushToast(`Pedido enviado para ${participant.name}!`);
+    else pushToast(result.error || "Erro ao enviar pedido.");
   }
 
   const remoteParticipants = useMemo(() => Array.from(webrtc.participants.values()), [webrtc.participants]);
@@ -281,6 +298,7 @@ function CallExperience({ roomId, name }) {
     () => ({
       id: "self",
       name: `${name}`,
+      avatar: user?.avatar || null,
       isLocal: true,
       stream: media.localStream,
       micOn: media.micOn,
@@ -288,7 +306,7 @@ function CallExperience({ roomId, name }) {
       isSharingScreen: media.isSharingScreen,
       speaking: localSpeaking,
     }),
-    [name, media.localStream, media.micOn, media.camOn, media.isSharingScreen, localSpeaking]
+    [name, user, media.localStream, media.micOn, media.camOn, media.isSharingScreen, localSpeaking]
   );
 
   const inviteUrl = buildInviteUrl(normalizedRoomId);
@@ -406,6 +424,7 @@ function CallExperience({ roomId, name }) {
             self={selfForGrid}
             remoteParticipants={remoteParticipants}
             onClose={() => setActivePanel(null)}
+            onAddFriend={user ? handleAddFriend : null}
           />
         )}
 

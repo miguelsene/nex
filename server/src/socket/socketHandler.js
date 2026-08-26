@@ -12,13 +12,13 @@ export function registerSocketHandlers(io, socket) {
   // Sala em que este socket está atualmente (um socket = uma sala por vez)
   let currentRoomId = null;
 
-  socket.on("join-room", ({ roomId, name }, callback) => {
+  socket.on("join-room", ({ roomId, name, avatar, userId }, callback) => {
     try {
       if (!roomManager.isValidRoomId(roomId)) {
         return callback?.({ ok: false, error: "ID de sala inválido." });
       }
 
-      const result = roomManager.addParticipant(roomId, socket.id, name);
+      const result = roomManager.addParticipant(roomId, socket.id, name, avatar, userId);
       if (!result) {
         return callback?.({ ok: false, error: "Não foi possível entrar na sala." });
       }

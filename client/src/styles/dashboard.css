@@ -322,6 +322,24 @@
   opacity: 0.3;
 }
 
+/* --- Busca por ID --- */
+.dash-search-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dash-search-form .name-input-wrap {
+  padding: 0 12px;
+}
+
+.dash-search-form .name-input-wrap input {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  padding: 10px 0;
+}
+
 /* --- Mobile --- */
 @media (max-width: 700px) {
   .dash-body {

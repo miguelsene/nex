@@ -4,6 +4,7 @@ import { getInitials } from "../utils/format.js";
 export default function VideoCard({
   stream,
   name,
+  avatar = null,
   isLocal = false,
   micOn = true,
   camOn = true,
@@ -65,7 +66,10 @@ export default function VideoCard({
       <video ref={videoRef} autoPlay playsInline muted={isLocal} />
 
       <div className="avatar-fallback">
-        <div className="avatar-circle">{getInitials(name)}</div>
+        {avatar
+          ? <img src={avatar} alt={name} className="avatar-circle" style={{ objectFit: "cover" }} />
+          : <div className="avatar-circle">{getInitials(name)}</div>
+        }
       </div>
 
       <div className="video-card-badge">
