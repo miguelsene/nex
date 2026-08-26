@@ -50,7 +50,9 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json());
+// Ícones de servidores chegam como data URL; o padrão de 100 KB é pequeno
+// para imagens comuns e fazia a criação falhar antes de chegar à rota.
+app.use(express.json({ limit: "2mb" }));
 
 // --- Rotas ---
 

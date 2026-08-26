@@ -153,20 +153,18 @@ export default function MusicPlayer({ socket, isHost, onClose, visible }) {
       </div>
 
       <div className="music-body">
-        {isHost && (
-          <form className="music-url-form" onSubmit={handleLoad}>
-            <div className="name-input-wrap" style={{ flex: 1 }}>
-              <i className="bi bi-youtube" style={{ color: "#ff0000" }} />
-              <input
-                type="text"
-                placeholder="Link do YouTube..."
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-              />
-            </div>
-            <button type="submit" className="btn-ghost-sm">Carregar</button>
-          </form>
-        )}
+        <form className="music-url-form" onSubmit={handleLoad}>
+          <div className="name-input-wrap" style={{ flex: 1 }}>
+            <i className="bi bi-youtube" style={{ color: "#ff0000" }} />
+            <input
+              type="text"
+              placeholder="Link do YouTube..."
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+            />
+          </div>
+          <button type="submit" className="btn-ghost-sm">Carregar</button>
+        </form>
         {error && <div className="error-text" style={{ padding: "0 4px" }}>{error}</div>}
 
         {/* Container fixo — nunca removido do DOM */}

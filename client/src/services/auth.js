@@ -57,3 +57,25 @@ export async function getUserByFriendId(friendId) {
   if (!data.ok) return null;
   return data.user;
 }
+
+export async function getFriends() {
+  const data = await api("/friends", null, "GET");
+  return data.friends || [];
+}
+
+export async function getIncomingFriendRequests() {
+  const data = await api("/friend-requests", null, "GET");
+  return data.requests || [];
+}
+
+export async function sendFriendRequestById(friendId) {
+  return api("/friend-requests", { friendId });
+}
+
+export async function acceptIncomingFriendRequest(id) {
+  return api(`/friend-requests/${id}/accept`, {}, "POST");
+}
+
+export async function declineIncomingFriendRequest(id) {
+  return api(`/friend-requests/${id}`, null, "DELETE");
+}

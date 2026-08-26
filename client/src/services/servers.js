@@ -11,7 +11,9 @@ async function api(path, body, method) {
     },
     body: body ? JSON.stringify(body) : undefined,
   });
-  return res.json();
+  const data = await res.json().catch(() => ({ ok: false, error: "Resposta inválida do servidor." }));
+  if (!res.ok && data.ok !== false) return { ok: false, error: `Erro ao comunicar com o servidor (${res.status}).` };
+  return data;
 }
 
 export async function getMyServers() {

@@ -66,6 +66,7 @@ export default function Servers() {
   const [view, setView] = useState("channels");
   const [modal, setModal] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [createError, setCreateError] = useState(null);
   const messagesEndRef = useRef(null);
   const iconRef = useRef(null);
   const editIconRef = useRef(null);
@@ -162,12 +163,16 @@ export default function Servers() {
   async function handleCreate(e) {
     e.preventDefault();
     if (!newName.trim()) return;
+    setCreateError(null);
     setLoading(true);
     try {
       const s = await createServer(newName, newIcon);
+      setServers((current) => current.some((server) => server.id === s.id) ? current : [...current, s]);
+      await selectServer(s);
       setModal(null); setNewName(""); setNewIcon(null);
-      await reload();
-      selectServer(s);
+      reload(s).catch(() => {});
+    } catch (error) {
+      setCreateError(error.message || "Não foi possível criar o servidor. Tente novamente.");
     } finally { setLoading(false); }
   }
 
@@ -401,6 +406,7 @@ export default function Servers() {
                     <i className="bi bi-server" />
                     <input type="text" placeholder="Nome do servidor" value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={40} autoFocus />
                   </div>
+                  {createError && <div className="error-text">{createError}</div>}
                   <button type="submit" className="btn btn-primary" disabled={!newName.trim() || loading}>
                     {loading ? "Criando..." : "Criar"}
                   </button>

@@ -29,11 +29,12 @@ router.post("/register", async (req, res) => {
     return res.status(409).json({ ok: false, error: "Este e-mail já está cadastrado." });
 
   const hash = await bcrypt.hash(password, 10);
-  const id = randomUUID();
   let friendId = generateFriendId();
   while (db.prepare("SELECT id FROM users WHERE friend_id = ?").get(friendId)) {
     friendId = generateFriendId();
   }
+  // O mesmo código público é o ID da conta: somente números e fácil de compartilhar.
+  const id = friendId;
 
   db.prepare("INSERT INTO users (id, friend_id, name, email, hash, avatar) VALUES (?,?,?,?,?,?)")
     .run(id, friendId, name.trim().slice(0, 40), key, hash, avatarDataUrl || null);
@@ -75,6 +76,42 @@ router.get("/search/:friendId", (req, res) => {
     .get(String(req.params.friendId).trim());
   if (!row) return res.status(404).json({ ok: false, error: "Usuário não encontrado." });
   res.json({ ok: true, user: { id: row.id, friendId: row.friend_id, name: row.name, avatar: row.avatar || null } });
+});
+
+router.get("/friends", requireAuth, (req, res) => {
+  const rows = db.prepare(`SELECT u.id, u.friend_id, u.name, u.avatar FROM friend_requests f
+    JOIN users u ON u.id = CASE WHEN f.from_user_id = ? THEN f.to_user_id ELSE f.from_user_id END
+    WHERE (f.from_user_id = ? OR f.to_user_id = ?) AND f.status = 'accepted' ORDER BY u.name`)
+    .all(req.userId, req.userId, req.userId);
+  res.json({ ok: true, friends: rows.map((row) => ({ id: row.id, friendId: row.friend_id, name: row.name, avatar: row.avatar || null })) });
+});
+
+router.get("/friend-requests", requireAuth, (req, res) => {
+  const rows = db.prepare(`SELECT f.id, f.created_at, u.id AS from_id, u.friend_id, u.name, u.avatar FROM friend_requests f
+    JOIN users u ON u.id = f.from_user_id WHERE f.to_user_id = ? AND f.status = 'pending' ORDER BY f.created_at DESC`).all(req.userId);
+  res.json({ ok: true, requests: rows.map((row) => ({ id: row.id, fromId: row.from_id, fromFriendId: row.friend_id, fromName: row.name, fromAvatar: row.avatar || null, at: row.created_at })) });
+});
+
+router.post("/friend-requests", requireAuth, (req, res) => {
+  const target = db.prepare("SELECT id FROM users WHERE friend_id = ?").get(String(req.body?.friendId || "").trim());
+  if (!target) return res.status(404).json({ ok: false, error: "Usuário não encontrado." });
+  if (target.id === req.userId) return res.status(400).json({ ok: false, error: "Você não pode adicionar a si mesmo." });
+  const existing = db.prepare("SELECT id, status FROM friend_requests WHERE (from_user_id = ? AND to_user_id = ?) OR (from_user_id = ? AND to_user_id = ?)").get(req.userId, target.id, target.id, req.userId);
+  if (existing?.status === "accepted") return res.status(409).json({ ok: false, error: "Este usuário já é seu contato." });
+  if (existing) return res.status(409).json({ ok: false, error: "Já existe um pedido entre vocês." });
+  db.prepare("INSERT INTO friend_requests (id, from_user_id, to_user_id, status, created_at) VALUES (?,?,?,?,?)").run(randomUUID(), req.userId, target.id, "pending", Date.now());
+  res.json({ ok: true });
+});
+
+router.post("/friend-requests/:id/accept", requireAuth, (req, res) => {
+  const result = db.prepare("UPDATE friend_requests SET status = 'accepted' WHERE id = ? AND to_user_id = ? AND status = 'pending'").run(req.params.id, req.userId);
+  if (!result.changes) return res.status(404).json({ ok: false, error: "Pedido não encontrado." });
+  res.json({ ok: true });
+});
+
+router.delete("/friend-requests/:id", requireAuth, (req, res) => {
+  db.prepare("DELETE FROM friend_requests WHERE id = ? AND to_user_id = ? AND status = 'pending'").run(req.params.id, req.userId);
+  res.json({ ok: true });
 });
 
 export function requireAuth(req, res, next) {

@@ -21,13 +21,11 @@ function DiceResult({ text }) {
   );
 }
 import {
-  getCallHistory, getContacts, removeContact,
-  getDMs, sendDM, getFriendRequests,
-  acceptFriendRequest, declineFriendRequest,
-  sendFriendRequest, removeCallRecord, clearCallHistory,
+  getCallHistory, removeContact,
+  getDMs, sendDM, removeCallRecord, clearCallHistory,
 } from "../services/social.js";
 import { createRoom } from "../services/api.js";
-import { updateProfile, getUserByFriendId } from "../services/auth.js";
+import { updateProfile, getUserByFriendId, getFriends, getIncomingFriendRequests, sendFriendRequestById, acceptIncomingFriendRequest, declineIncomingFriendRequest } from "../services/auth.js";
 
 function formatDuration(s) {
   if (!s) return "0s";
@@ -85,11 +83,16 @@ export default function Dashboard() {
 
   const messagesEndRef = useRef(null);
 
-  function reload() {
+  async function reload() {
     if (!user) return;
     setHistory(getCallHistory(user.id));
-    setContacts(getContacts(user.id));
-    setRequests(getFriendRequests(user.id).filter((r) => r.status === "pending"));
+    try {
+      const [remoteContacts, remoteRequests] = await Promise.all([getFriends(), getIncomingFriendRequests()]);
+      setContacts(remoteContacts);
+      setRequests(remoteRequests);
+    } catch {
+      // Mantém histórico local utilizável se o servidor estiver temporariamente indisponível.
+    }
   }
 
   useEffect(() => { reload(); }, [user]); // eslint-disable-line
@@ -136,14 +139,14 @@ export default function Dashboard() {
     setDmText("");
   }
 
-  function handleAccept(reqId) {
-    acceptFriendRequest(user.id, reqId, user);
+  async function handleAccept(reqId) {
+    await acceptIncomingFriendRequest(reqId);
     reload();
   }
 
-  function handleDecline(reqId) {
-    declineFriendRequest(user.id, reqId);
-    setRequests(getFriendRequests(user.id).filter((r) => r.status === "pending"));
+  async function handleDecline(reqId) {
+    await declineIncomingFriendRequest(reqId);
+    reload();
   }
 
   async function handleSearch(e) {
@@ -158,9 +161,9 @@ export default function Dashboard() {
     setSearchResult(found);
   }
 
-  function handleSendRequestFromSearch() {
+  async function handleSendRequestFromSearch() {
     if (!searchResult) return;
-    const result = sendFriendRequest({ id: user.id, name: user.name, avatar: user.avatar || null }, searchResult.id);
+    const result = await sendFriendRequestById(searchResult.friendId);
     if (result.ok) {
       setSearchMsg({ ok: true, text: `Pedido enviado para ${searchResult.name}!` });
       setSearchResult(null);
