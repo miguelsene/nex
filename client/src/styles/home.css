@@ -101,6 +101,8 @@
   align-items: center;
   justify-content: center;
   box-shadow: var(--shadow-glow-violet);
+  overflow: hidden;
+  padding: 4px;
 }
 
 .brand-mark i {

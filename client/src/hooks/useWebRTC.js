@@ -23,6 +23,7 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
   const iceServersRef = useRef(iceServers);
   const participantsRef = useRef(participants);
   const activeVideoTrackRef = useRef(null); // câmera OU tela — o que deve ser enviado agora
+  const joinedRef = useRef(false); // garante join único
 
   useEffect(() => {
     localStreamRef.current = localStream;
@@ -152,26 +153,26 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
   // --- Entra na sala assim que socket e mídia local estiverem prontos ---
   useEffect(() => {
     if (!socket || !roomId || !name || !localStream) return;
-    let cancelled = false;
+    if (joinedRef.current) return; // evita join duplo se userId/avatar chegarem depois
+    joinedRef.current = true;
 
     socket.emit("join-room", { roomId, name, avatar, userId }, async (response) => {
-      if (cancelled) return;
       if (!response?.ok) {
         setJoinError(response?.error || "Não foi possível entrar na sala.");
+        joinedRef.current = false;
         return;
       }
 
       setSelfId(response.self.id);
       setJoined(true);
 
-      // Cria conexões e envia offers para quem já estava na sala
       for (const participant of response.participants) {
         await createOfferTo(participant.id, participant);
       }
     });
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socket, roomId, name, localStream]);
+  }, [socket, roomId, name, localStream, userId, avatar]);
 
   // --- Listeners de sinalização e presença ---
   useEffect(() => {

@@ -18,6 +18,7 @@ import Chat from "../components/Chat.jsx";
 import InviteModal from "../components/InviteModal.jsx";
 import SettingsModal from "../components/SettingsModal.jsx";
 import MusicPlayer from "../components/MusicPlayer.jsx";
+import NexLogo from "../components/NexLogo.jsx";
 import ThemePicker from "../components/ThemePicker.jsx";
 
 export default function Room() {
@@ -364,9 +365,9 @@ function CallExperience({ roomId, name }) {
       <div className="room-topbar">
         <div className="brand">
           <span className="brand-mark">
-            <i className="bi bi-broadcast" />
+            <NexLogo size={18} />
           </span>
-          <span className="brand-text">Nexa</span>
+          <span className="brand-text">Nex</span>
         </div>
 
         <div className="room-meta">

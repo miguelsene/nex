@@ -4,6 +4,7 @@ import { createRoom } from "../services/api.js";
 import { validateName } from "../utils/format.js";
 import { useAuth } from "../hooks/useAuth.jsx";
 import ThemePicker from "../components/ThemePicker.jsx";
+import NexLogo from "../components/NexLogo.jsx";
 
 const FEATURES = [
   { icon: "bi-camera-video-fill", title: "Vídeo em tempo real", desc: "Chamadas fluidas direto do navegador, sem instalar nada." },
@@ -97,8 +98,8 @@ export default function Home() {
 
       <header className="home-header">
         <div className="brand">
-          <span className="brand-mark"><i className="bi bi-broadcast" /></span>
-          Nexa
+          <span className="brand-mark"><NexLogo size={22} /></span>
+          Nex
         </div>
         <ThemePicker />
         <nav>
