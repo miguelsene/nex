@@ -5,6 +5,16 @@ import App from "./App.jsx";
 import "./styles/index.css";
 import { THEMES } from "./hooks/useTheme.js";
 
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+}
+
+// Guarda o evento mesmo enquanto a abertura ainda está sendo exibida.
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  window.nexInstallPrompt = event;
+});
+
 // Aplica tema salvo antes do primeiro render para evitar flash
 (function () {
   const id = localStorage.getItem("nexa_theme");

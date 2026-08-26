@@ -5,6 +5,7 @@ import { validateName } from "../utils/format.js";
 import { useAuth } from "../hooks/useAuth.jsx";
 import ThemePicker from "../components/ThemePicker.jsx";
 import NexLogo from "../components/NexLogo.jsx";
+import InstallAppButton from "../components/InstallAppButton.jsx";
 
 const FEATURES = [
   { icon: "bi-camera-video-fill", title: "Vídeo em tempo real", desc: "Chamadas fluidas direto do navegador, sem instalar nada." },
@@ -101,6 +102,7 @@ export default function Home() {
           <span className="brand-mark"><NexLogo size={22} /></span>
           Nex
         </div>
+        <InstallAppButton />
         <ThemePicker />
         <nav>
           <a href="#features">Recursos</a>

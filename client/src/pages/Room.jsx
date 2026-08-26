@@ -316,7 +316,8 @@ function CallExperience({ roomId, name }) {
   // --- Estados de carregamento / erro de mídia ---
   if (media.status === "requesting") {
     return (
-      <div className="full-screen-loader">
+      <div className="full-screen-loader rpg-loader">
+        <NexLogo size={76} />
         <div className="spinner" />
         <p>Solicitando acesso à câmera e ao microfone...</p>
       </div>
@@ -325,7 +326,8 @@ function CallExperience({ roomId, name }) {
 
   if (media.status === "error") {
     return (
-      <div className="full-screen-loader">
+      <div className="full-screen-loader rpg-loader">
+        <NexLogo size={76} />
         <div className="error-banner">
           <i className="bi bi-exclamation-triangle-fill" />
           {media.errorMessage}
@@ -339,7 +341,8 @@ function CallExperience({ roomId, name }) {
 
   if (!webrtc.joined && !webrtc.joinError) {
     return (
-      <div className="full-screen-loader">
+      <div className="full-screen-loader rpg-loader">
+        <NexLogo size={76} />
         <div className="spinner" />
         <p>Conectando à sala {normalizedRoomId}...</p>
       </div>
@@ -348,7 +351,8 @@ function CallExperience({ roomId, name }) {
 
   if (webrtc.joinError) {
     return (
-      <div className="full-screen-loader">
+      <div className="full-screen-loader rpg-loader">
+        <NexLogo size={76} />
         <div className="error-banner">
           <i className="bi bi-exclamation-triangle-fill" />
           {webrtc.joinError}
