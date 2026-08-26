@@ -5,7 +5,7 @@ import {
   getCallHistory, getContacts, removeContact,
   getDMs, sendDM, getFriendRequests,
   acceptFriendRequest, declineFriendRequest,
-  sendFriendRequest,
+  sendFriendRequest, removeCallRecord, clearCallHistory,
 } from "../services/social.js";
 import { createRoom } from "../services/api.js";
 import { updateProfile, getUserByFriendId } from "../services/auth.js";
@@ -131,7 +131,9 @@ export default function Dashboard() {
     e.preventDefault();
     setSearchMsg(null);
     setSearchResult(null);
-    const found = getUserByFriendId(searchId.trim());
+    const id = searchId.trim();
+    if (!id || id.length < 6) { setSearchMsg({ ok: false, text: "Digite um ID válido (9 dígitos)." }); return; }
+    const found = getUserByFriendId(id);
     if (!found) { setSearchMsg({ ok: false, text: "Nenhum usuário encontrado." }); return; }
     if (found.id === user.id) { setSearchMsg({ ok: false, text: "Esse é o seu próprio ID." }); return; }
     setSearchResult(found);
@@ -221,6 +223,9 @@ export default function Dashboard() {
         </div>
 
         <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn-ghost-sm" onClick={() => navigate("/servers")} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <i className="bi bi-server" /> Servidores
+          </button>
           <button className="btn btn-primary" style={{ padding: "8px 18px", fontSize: "0.85rem" }} onClick={handleNewCall} disabled={loading}>
             <i className="bi bi-plus-circle-fill" /> {loading ? "Criando..." : "Nova sala"}
           </button>
@@ -280,6 +285,17 @@ export default function Dashboard() {
 
           {tab === "history" && (
             <div className="dash-list">
+              {history.length > 0 && (
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button
+                    className="btn-ghost-sm"
+                    style={{ fontSize: "0.75rem", color: "var(--danger)", borderColor: "rgba(255,77,109,0.3)" }}
+                    onClick={() => { clearCallHistory(user.id); setHistory([]); }}
+                  >
+                    <i className="bi bi-trash3" /> Limpar tudo
+                  </button>
+                </div>
+              )}
               {history.length === 0 && (
                 <div className="dash-empty">
                   <i className="bi bi-camera-video" />
@@ -304,6 +320,14 @@ export default function Dashboard() {
                   >
                     <i className="bi bi-box-arrow-in-right" /> Entrar
                   </button>
+                  <button
+                    className="icon-btn"
+                    style={{ flexShrink: 0, color: "var(--danger)" }}
+                    onClick={() => { removeCallRecord(user.id, call.id); setHistory(getCallHistory(user.id)); }}
+                    title="Remover"
+                  >
+                    <i className="bi bi-x" />
+                  </button>
                 </div>
               ))}
             </div>
@@ -317,10 +341,11 @@ export default function Dashboard() {
                   <i className="bi bi-search" />
                   <input
                     type="text"
-                    placeholder="Buscar por ID (ex: AB3X7Y2Z)"
+                    placeholder="Buscar por ID (ex: 123456789)"
                     value={searchId}
-                    onChange={(e) => setSearchId(e.target.value.toUpperCase())}
-                    maxLength={12}
+                    onChange={(e) => setSearchId(e.target.value.replace(/\D/g, ""))}
+                    maxLength={9}
+                    inputMode="numeric"
                   />
                 </div>
                 <button type="submit" className="btn-ghost-sm">Buscar</button>

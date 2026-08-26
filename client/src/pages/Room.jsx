@@ -438,13 +438,12 @@ function CallExperience({ roomId, name }) {
           />
         )}
 
-        {activePanel === "music" && (
-          <MusicPlayer
-            socket={socket}
-            isHost={remoteParticipants.length === 0 || webrtc.selfId === Array.from(webrtc.participants.keys())[0]}
-            onClose={() => setActivePanel(null)}
-          />
-        )}
+        <MusicPlayer
+          socket={socket}
+          isHost={remoteParticipants.length === 0 || webrtc.selfId === Array.from(webrtc.participants.keys())[0]}
+          onClose={() => setActivePanel(null)}
+          visible={activePanel === "music"}
+        />
       </div>
 
       <CallControls

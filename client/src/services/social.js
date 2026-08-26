@@ -16,6 +16,22 @@ export function getCallHistory(userId) {
   } catch { return []; }
 }
 
+export function removeCallRecord(userId, recordId) {
+  try {
+    const all = JSON.parse(localStorage.getItem(HISTORY_KEY) || "{}");
+    all[userId] = (all[userId] || []).filter((r) => r.id !== recordId);
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+export function clearCallHistory(userId) {
+  try {
+    const all = JSON.parse(localStorage.getItem(HISTORY_KEY) || "{}");
+    all[userId] = [];
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(all));
+  } catch {}
+}
+
 export function saveCallRecord(userId, { roomId, participants, durationSeconds }) {
   try {
     const all = JSON.parse(localStorage.getItem(HISTORY_KEY) || "{}");

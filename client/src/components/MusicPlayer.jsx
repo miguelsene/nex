@@ -10,7 +10,9 @@ function extractVideoId(url) {
   }
 }
 
-export default function MusicPlayer({ socket, isHost, onClose }) {
+const PLAYER_DIV_ID = "yt-music-player-mount";
+
+export default function MusicPlayer({ socket, isHost, onClose, visible }) {
   const [url, setUrl] = useState("");
   const [videoId, setVideoId] = useState(null);
   const [playing, setPlaying] = useState(false);
@@ -18,57 +20,65 @@ export default function MusicPlayer({ socket, isHost, onClose }) {
   const [volume, setVolume] = useState(50);
   const [error, setError] = useState(null);
   const playerRef = useRef(null);
-  const iframeRef = useRef(null);
   const readyRef = useRef(false);
+  const loopRef = useRef(loop);
+  const volumeRef = useRef(volume);
+
+  loopRef.current = loop;
+  volumeRef.current = volume;
 
   // Carrega a YouTube IFrame API uma vez
   useEffect(() => {
-    if (window.YT) return;
+    if (window.YT?.Player) return;
     const tag = document.createElement("script");
     tag.src = "https://www.youtube.com/iframe_api";
     document.head.appendChild(tag);
   }, []);
 
+  function initPlayer(vid) {
+    readyRef.current = false;
+    if (playerRef.current) {
+      try { playerRef.current.destroy(); } catch {}
+      playerRef.current = null;
+    }
+
+    // Recria o div de montagem (YT API substitui o elemento)
+    const container = document.getElementById("yt-music-container");
+    if (!container) return;
+    container.innerHTML = `<div id="${PLAYER_DIV_ID}"></div>`;
+
+    playerRef.current = new window.YT.Player(PLAYER_DIV_ID, {
+      videoId: vid,
+      width: "100%",
+      height: "100%",
+      playerVars: { autoplay: 0, controls: 0, rel: 0, modestbranding: 1 },
+      events: {
+        onReady: (e) => {
+          readyRef.current = true;
+          e.target.setVolume(volumeRef.current);
+        },
+        onStateChange: (e) => {
+          const S = window.YT.PlayerState;
+          if (e.data === S.ENDED && loopRef.current) {
+            playerRef.current?.seekTo(0);
+            playerRef.current?.playVideo();
+          }
+          if (e.data === S.ENDED && !loopRef.current) setPlaying(false);
+        },
+      },
+    });
+  }
+
   // Cria/recria o player quando videoId muda
   useEffect(() => {
     if (!videoId) return;
-    readyRef.current = false;
-
-    function init() {
-      if (playerRef.current) {
-        playerRef.current.destroy();
-        playerRef.current = null;
-      }
-      playerRef.current = new window.YT.Player(iframeRef.current, {
-        videoId,
-        playerVars: { autoplay: 0, controls: 0, rel: 0, modestbranding: 1, loop: loop ? 1 : 0, playlist: loop ? videoId : undefined },
-        events: {
-          onReady: (e) => {
-            readyRef.current = true;
-            e.target.setVolume(volume);
-          },
-          onStateChange: (e) => {
-            const YT = window.YT.PlayerState;
-            if (e.data === YT.ENDED && loop) {
-              playerRef.current?.seekTo(0);
-              playerRef.current?.playVideo();
-            }
-            if (e.data === YT.ENDED && !loop) setPlaying(false);
-          },
-        },
-      });
-    }
-
     if (window.YT?.Player) {
-      init();
+      initPlayer(videoId);
     } else {
-      window.onYouTubeIframeAPIReady = init;
+      window.onYouTubeIframeAPIReady = () => initPlayer(videoId);
     }
-
-    return () => {
-      if (playerRef.current) { playerRef.current.destroy(); playerRef.current = null; }
-    };
-  }, [videoId]); // eslint-disable-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoId]);
 
   // Recebe atualizações dos outros participantes
   useEffect(() => {
@@ -115,12 +125,6 @@ export default function MusicPlayer({ socket, isHost, onClose }) {
     broadcast({ action: "pause", videoId });
   }
 
-  function handleSeek(e) {
-    const t = Number(e.target.value);
-    playerRef.current?.seekTo?.(t);
-    broadcast({ action: "seek", videoId, currentTime: t });
-  }
-
   function handleVolume(e) {
     const v = Number(e.target.value);
     setVolume(v);
@@ -142,7 +146,7 @@ export default function MusicPlayer({ socket, isHost, onClose }) {
   }
 
   return (
-    <div className="side-panel music-panel">
+    <div className="side-panel music-panel" style={{ display: visible ? "flex" : "none" }}>
       <div className="side-panel-header">
         <h3><i className="bi bi-music-note-beamed" /> Música</h3>
         <button className="icon-btn" onClick={onClose}><i className="bi bi-x-lg" /></button>
@@ -165,9 +169,13 @@ export default function MusicPlayer({ socket, isHost, onClose }) {
         )}
         {error && <div className="error-text" style={{ padding: "0 4px" }}>{error}</div>}
 
-        {/* Container do player — sempre presente para o YT API poder montar */}
-        <div className={`music-player-wrap${videoId ? "" : " hidden"}`}>
-          <div ref={iframeRef} />
+        {/* Container fixo — nunca removido do DOM */}
+        <div
+          id="yt-music-container"
+          className="music-player-wrap"
+          style={{ visibility: videoId ? "visible" : "hidden", height: videoId ? undefined : 0, padding: videoId ? undefined : 0 }}
+        >
+          <div id={PLAYER_DIV_ID} />
         </div>
 
         {!videoId && (

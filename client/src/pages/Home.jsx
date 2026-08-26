@@ -113,6 +113,9 @@ export default function Home() {
               <a href="/dashboard" className="btn-ghost-sm" style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 <i className="bi bi-grid" /> Painel
               </a>
+              <a href="/servers" className="btn-ghost-sm" style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <i className="bi bi-server" /> Servidores
+              </a>
               <button className="btn-ghost-sm" onClick={logout}>Sair</button>
             </div>
           ) : (
