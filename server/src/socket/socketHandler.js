@@ -1,6 +1,7 @@
 import { roomManager } from "../rooms/roomManager.js";
 
 const MAX_CHAT_MESSAGE_LENGTH = 1000;
+const musicStates = new Map();
 
 /**
  * Registra todos os eventos de sinalização para uma conexão Socket.IO.
@@ -93,10 +94,29 @@ export function registerSocketHandlers(io, socket) {
   });
 
   // --- Música compartilhada (YouTube) ---
-  socket.on("music-update", (data) => {
+  socket.on("music-update", (data = {}) => {
     if (!currentRoomId) return;
+    const previous = musicStates.get(currentRoomId) || {};
+    const currentTime = data.action === "load" ? 0 : Number.isFinite(Number(data.currentTime)) ? Math.max(0, Number(data.currentTime)) : previous.currentTime || 0;
+    const next = {
+      videoId: typeof data.videoId === "string" ? data.videoId.slice(0, 32) : previous.videoId,
+      currentTime,
+      loop: data.loop === undefined ? previous.loop : !!data.loop,
+      volume: data.volume === undefined ? previous.volume : Math.min(100, Math.max(0, Number(data.volume) || 0)),
+      playing: data.action === "play" ? true : data.action === "pause" || data.action === "load" ? false : !!previous.playing,
+      updatedAt: Date.now(),
+    };
+    musicStates.set(currentRoomId, next);
     // Repassa para todos os outros na sala
-    socket.to(currentRoomId).emit("music-update", data);
+    socket.to(currentRoomId).emit("music-update", { ...data, ...next, action: data.action });
+  });
+
+  socket.on("get-music-state", () => {
+    if (!currentRoomId) return;
+    const state = musicStates.get(currentRoomId);
+    if (!state?.videoId) return;
+    const elapsed = state.playing ? (Date.now() - state.updatedAt) / 1000 : 0;
+    socket.emit("music-update", { ...state, currentTime: state.currentTime + elapsed, action: state.playing ? "play" : "pause" });
   });
 
   // --- Chat (somente em memória, dura enquanto a sala existir) ---
@@ -135,6 +155,7 @@ export function registerSocketHandlers(io, socket) {
     currentRoomId = null;
 
     roomManager.removeParticipant(roomId, socket.id);
+    if (roomManager.listParticipants(roomId).length === 0) musicStates.delete(roomId);
     socket.to(roomId).emit("user-left", { id: socket.id });
     socket.leave(roomId);
   }

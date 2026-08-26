@@ -65,6 +65,15 @@ db.exec(`
     created_at INTEGER NOT NULL,
     UNIQUE(from_user_id, to_user_id)
   );
+
+  CREATE TABLE IF NOT EXISTS direct_messages (
+    id TEXT PRIMARY KEY,
+    from_user_id TEXT NOT NULL,
+    to_user_id TEXT NOT NULL,
+    text TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_direct_messages_conversation ON direct_messages(from_user_id, to_user_id, created_at);
 `);
 
 export default db;

@@ -81,3 +81,12 @@ export async function acceptIncomingFriendRequest(id) {
 export async function declineIncomingFriendRequest(id) {
   return api(`/friend-requests/${id}`, null, "DELETE");
 }
+
+export async function getDirectMessages(contactId) {
+  const data = await api(`/direct-messages/${encodeURIComponent(contactId)}`, null, "GET");
+  return data.messages || [];
+}
+
+export async function sendDirectMessage(toUserId, text) {
+  return api("/direct-messages", { toUserId, text });
+}

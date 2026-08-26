@@ -114,6 +114,31 @@ router.delete("/friend-requests/:id", requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+function areFriends(userId, contactId) {
+  return !!db.prepare("SELECT id FROM friend_requests WHERE status = 'accepted' AND ((from_user_id = ? AND to_user_id = ?) OR (from_user_id = ? AND to_user_id = ?))")
+    .get(userId, contactId, contactId, userId);
+}
+
+router.get("/direct-messages/:contactId", requireAuth, (req, res) => {
+  const contactId = String(req.params.contactId);
+  if (!areFriends(req.userId, contactId)) return res.status(403).json({ ok: false, error: "Você só pode conversar com contatos." });
+  const messages = db.prepare(`SELECT * FROM direct_messages WHERE
+    (from_user_id = ? AND to_user_id = ?) OR (from_user_id = ? AND to_user_id = ?)
+    ORDER BY created_at ASC LIMIT 300`).all(req.userId, contactId, contactId, req.userId);
+  res.json({ ok: true, messages: messages.map((message) => ({ id: message.id, fromId: message.from_user_id, toId: message.to_user_id, text: message.text, at: message.created_at })) });
+});
+
+router.post("/direct-messages", requireAuth, (req, res) => {
+  const toUserId = String(req.body?.toUserId || "");
+  const text = String(req.body?.text || "").trim().slice(0, 500);
+  if (!text) return res.status(400).json({ ok: false, error: "Mensagem vazia." });
+  if (!areFriends(req.userId, toUserId)) return res.status(403).json({ ok: false, error: "Você só pode conversar com contatos." });
+  const message = { id: randomUUID(), fromId: req.userId, toId: toUserId, text, at: Date.now() };
+  db.prepare("INSERT INTO direct_messages (id, from_user_id, to_user_id, text, created_at) VALUES (?,?,?,?,?)")
+    .run(message.id, message.fromId, message.toId, message.text, message.at);
+  res.json({ ok: true, message });
+});
+
 export function requireAuth(req, res, next) {
   const auth = req.headers.authorization;
   if (!auth?.startsWith("Bearer ")) return res.status(401).json({ ok: false, error: "Não autenticado." });

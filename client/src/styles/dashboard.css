@@ -342,6 +342,18 @@
 
 /* --- Mobile --- */
 @media (max-width: 700px) {
+  .dash-header {
+    padding: 10px 14px;
+    align-items: center;
+  }
+
+  .dash-header > div:last-child {
+    width: 100%;
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
   .dash-body {
     flex-direction: column;
     padding: 12px 14px;
@@ -358,5 +370,28 @@
 
   .dash-dm {
     min-height: 50vh;
+  }
+
+  .dash-tabs {
+    overflow-x: auto;
+  }
+
+  .dash-tab {
+    min-width: 88px;
+    padding: 9px 8px;
+  }
+
+  .dash-search-form,
+  .dash-dm-input {
+    gap: 6px;
+  }
+
+  .dash-item {
+    padding: 11px 12px;
+    gap: 9px;
+  }
+
+  .dash-dm-messages {
+    padding: 12px;
   }
 }

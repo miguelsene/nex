@@ -23,9 +23,20 @@ export default function MusicPlayer({ socket, isHost, onClose, visible }) {
   const readyRef = useRef(false);
   const loopRef = useRef(loop);
   const volumeRef = useRef(volume);
+  const pendingUpdateRef = useRef(null);
 
   loopRef.current = loop;
   volumeRef.current = volume;
+
+  function applyMusicUpdate({ action, currentTime, loop: lp, volume: vol }) {
+    if (lp !== undefined) setLoop(lp);
+    if (vol !== undefined) { setVolume(vol); playerRef.current?.setVolume?.(vol); }
+    if (!readyRef.current) return false;
+    if (action === "play") { playerRef.current?.seekTo?.(currentTime || 0); playerRef.current?.playVideo?.(); setPlaying(true); }
+    if (action === "pause") { playerRef.current?.seekTo?.(currentTime || 0); playerRef.current?.pauseVideo?.(); setPlaying(false); }
+    if (action === "seek") playerRef.current?.seekTo?.(currentTime || 0);
+    return true;
+  }
 
   // Carrega a YouTube IFrame API uma vez
   useEffect(() => {
@@ -56,6 +67,10 @@ export default function MusicPlayer({ socket, isHost, onClose, visible }) {
         onReady: (e) => {
           readyRef.current = true;
           e.target.setVolume(volumeRef.current);
+          if (pendingUpdateRef.current) {
+            applyMusicUpdate(pendingUpdateRef.current);
+            pendingUpdateRef.current = null;
+          }
         },
         onStateChange: (e) => {
           const S = window.YT.PlayerState;
@@ -83,16 +98,17 @@ export default function MusicPlayer({ socket, isHost, onClose, visible }) {
   // Recebe atualizações dos outros participantes
   useEffect(() => {
     if (!socket) return;
-    function onMusicUpdate({ action, videoId: vid, currentTime, loop: lp, volume: vol }) {
-      if (vid && vid !== videoId) setVideoId(vid);
-      if (lp !== undefined) setLoop(lp);
-      if (vol !== undefined) { setVolume(vol); playerRef.current?.setVolume?.(vol); }
-      if (!readyRef.current) return;
-      if (action === "play") { playerRef.current?.seekTo?.(currentTime || 0); playerRef.current?.playVideo?.(); setPlaying(true); }
-      if (action === "pause") { playerRef.current?.pauseVideo?.(); setPlaying(false); }
-      if (action === "seek") { playerRef.current?.seekTo?.(currentTime || 0); }
+    function onMusicUpdate(update) {
+      const { videoId: vid } = update;
+      if (vid && vid !== videoId) {
+        pendingUpdateRef.current = update;
+        setVideoId(vid);
+        return;
+      }
+      if (!applyMusicUpdate(update)) pendingUpdateRef.current = update;
     }
     socket.on("music-update", onMusicUpdate);
+    socket.emit("get-music-state");
     return () => socket.off("music-update", onMusicUpdate);
   }, [socket, videoId]);
 
@@ -120,9 +136,10 @@ export default function MusicPlayer({ socket, isHost, onClose, visible }) {
 
   function handlePause() {
     if (!readyRef.current) return;
+    const t = playerRef.current?.getCurrentTime?.() || 0;
     playerRef.current?.pauseVideo?.();
     setPlaying(false);
-    broadcast({ action: "pause", videoId });
+    broadcast({ action: "pause", videoId, currentTime: t });
   }
 
   function handleVolume(e) {

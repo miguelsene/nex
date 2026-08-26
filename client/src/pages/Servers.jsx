@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth.jsx";
 import { parseDice, hasDice } from "../utils/dice.js";
+import { createRoom } from "../services/api.js";
 import {
   getMyServers, createServer, joinServer, leaveServer,
   editServer, getServerMessages, sendServerMessage,
@@ -16,8 +17,8 @@ function formatDate(ts) {
   return new Date(ts).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 }
 
-function DiceResult({ text }) {
-  const groups = parseDice(text);
+function DiceResult({ text, rollId }) {
+  const groups = parseDice(text, rollId);
   if (!groups.length) return null;
   return (
     <div className="dice-result">
@@ -126,7 +127,12 @@ export default function Servers() {
 
   async function selectChannel(ch) {
     if (ch.type === "voice") {
-      navigate(`/room/${activeServer.id.slice(0, 8)}-${ch.id.slice(0, 4)}`.toUpperCase(), { state: { name: user.name } });
+      try {
+        const { roomId } = await createRoom();
+        navigate(`/room/${roomId}`, { state: { name: user.name } });
+      } catch {
+        setJoinError("Não foi possível iniciar o canal de voz. Tente novamente.");
+      }
       return;
     }
     setActiveChannel(ch);
@@ -371,7 +377,7 @@ export default function Servers() {
                     <span className="server-msg-time">{formatDate(m.at)}</span>
                   </div>
                   <div className="server-msg-text">{m.text}</div>
-                  {hasDice(m.text) && <DiceResult text={m.text} />}
+                  {hasDice(m.text) && <DiceResult text={m.text} rollId={m.id} />}
                 </div>
               </div>
             ))}

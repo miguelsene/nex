@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { formatTime } from "../utils/format.js";
 import { parseDice, hasDice } from "../utils/dice.js";
 
-function DiceResult({ text }) {
-  const groups = parseDice(text);
+function DiceResult({ text, rollId }) {
+  const groups = parseDice(text, rollId);
   if (!groups.length) return null;
   return (
     <div className="dice-result">
@@ -67,7 +67,7 @@ export default function Chat({ messages, selfId, onSend, onClose }) {
                 <span>{formatTime(msg.timestamp)}</span>
               </div>
               <div className="bubble">{msg.text}</div>
-              {hasDice(msg.text) && <DiceResult text={msg.text} />}
+              {hasDice(msg.text) && <DiceResult text={msg.text} rollId={msg.id} />}
             </div>
           ))}
         </div>

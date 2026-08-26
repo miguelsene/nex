@@ -3,8 +3,8 @@ import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth.jsx";
 import { parseDice, hasDice } from "../utils/dice.js";
 
-function DiceResult({ text }) {
-  const groups = parseDice(text);
+function DiceResult({ text, rollId }) {
+  const groups = parseDice(text, rollId);
   if (!groups.length) return null;
   return (
     <div className="dice-result">
@@ -22,10 +22,10 @@ function DiceResult({ text }) {
 }
 import {
   getCallHistory, removeContact,
-  getDMs, sendDM, removeCallRecord, clearCallHistory,
+  removeCallRecord, clearCallHistory,
 } from "../services/social.js";
 import { createRoom } from "../services/api.js";
-import { updateProfile, getUserByFriendId, getFriends, getIncomingFriendRequests, sendFriendRequestById, acceptIncomingFriendRequest, declineIncomingFriendRequest } from "../services/auth.js";
+import { updateProfile, getUserByFriendId, getFriends, getIncomingFriendRequests, sendFriendRequestById, acceptIncomingFriendRequest, declineIncomingFriendRequest, getDirectMessages, sendDirectMessage } from "../services/auth.js";
 
 function formatDuration(s) {
   if (!s) return "0s";
@@ -98,7 +98,12 @@ export default function Dashboard() {
   useEffect(() => { reload(); }, [user]); // eslint-disable-line
 
   useEffect(() => {
-    if (dmContact && user) setDmMessages(getDMs(user.id, dmContact.id));
+    if (!dmContact || !user) return undefined;
+    let active = true;
+    const loadMessages = () => getDirectMessages(dmContact.id).then((messages) => { if (active) setDmMessages(messages); }).catch(() => {});
+    loadMessages();
+    const timer = window.setInterval(loadMessages, 2500);
+    return () => { active = false; window.clearInterval(timer); };
   }, [dmContact, user]);
 
   useEffect(() => {
@@ -131,12 +136,15 @@ export default function Dashboard() {
     if (dmContact?.id === id) setDmContact(null);
   }
 
-  function handleSendDM(e) {
+  async function handleSendDM(e) {
     e.preventDefault();
     if (!dmText.trim() || !dmContact) return;
-    sendDM(user.id, user.name, dmContact.id, dmText);
-    setDmMessages(getDMs(user.id, dmContact.id));
-    setDmText("");
+    const text = dmText.trim();
+    const result = await sendDirectMessage(dmContact.id, text);
+    if (result.ok) {
+      setDmMessages((current) => current.some((message) => message.id === result.message.id) ? current : [...current, result.message]);
+      setDmText("");
+    }
   }
 
   async function handleAccept(reqId) {
@@ -466,7 +474,7 @@ export default function Dashboard() {
               {dmMessages.map((m) => (
                 <div key={m.id} className={`dm-msg${m.fromId === user.id ? " own" : ""}`}>
                   <span className="dm-bubble">{m.text}</span>
-                  {hasDice(m.text) && <DiceResult text={m.text} />}
+                  {hasDice(m.text) && <DiceResult text={m.text} rollId={m.id} />}
                   <span className="dm-time">{formatDate(m.at)}</span>
                 </div>
               ))}
