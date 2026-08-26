@@ -1,105 +1,59 @@
-/**
- * Auth simples com localStorage — sem servidor de banco de dados.
- * Senhas são armazenadas com hash SHA-256 (não reversível).
- */
+import { SERVER_HTTP_URL } from "./socket.js";
 
-const USERS_KEY = "nexa_users";
 const SESSION_KEY = "nexa_session";
-
-async function hashPassword(password) {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(password));
-  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-function getUsers() {
-  try {
-    return JSON.parse(localStorage.getItem(USERS_KEY) || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function saveUsers(users) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
-}
+const TOKEN_KEY = "nexa_token";
 
 export function getSession() {
-  try {
-    return JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
-  } catch {
-    return null;
-  }
+  try { return JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); } catch { return null; }
+}
+
+export function getToken() {
+  return localStorage.getItem(TOKEN_KEY) || null;
 }
 
 export function logout() {
   localStorage.removeItem(SESSION_KEY);
+  localStorage.removeItem(TOKEN_KEY);
 }
 
-function generateFriendId() {
-  // ID numérico de 9 dígitos, começando sempre com dígito não-zero
-  return String(Math.floor(100000000 + Math.random() * 900000000));
+function saveSession(user, token) {
+  localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+}
+
+async function api(path, body, method = "POST") {
+  const token = getToken();
+  const res = await fetch(`${SERVER_HTTP_URL}/api/auth${path}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return res.json();
 }
 
 export async function register({ name, email, password, avatarDataUrl }) {
-  const users = getUsers();
-  const key = email.toLowerCase().trim();
-  if (users[key]) return { ok: false, error: "Este e-mail já está cadastrado." };
-
-  const hash = await hashPassword(password);
-  const friendId = generateFriendId();
-  const user = { id: crypto.randomUUID(), friendId, name: name.trim(), email: key, hash, avatar: avatarDataUrl || null };
-  users[key] = user;
-  saveUsers(users);
-
-  const session = { id: user.id, friendId: user.friendId, name: user.name, email: user.email, avatar: user.avatar };
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-  return { ok: true, user: session };
+  const data = await api("/register", { name, email, password, avatarDataUrl });
+  if (data.ok) saveSession(data.user, data.token);
+  return data;
 }
 
 export async function login({ email, password }) {
-  const users = getUsers();
-  const key = email.toLowerCase().trim();
-  const user = users[key];
-  if (!user) return { ok: false, error: "E-mail não encontrado." };
-
-  // Migrar contas antigas sem friendId
-  if (!user.friendId) {
-    user.friendId = generateFriendId();
-    users[key] = user;
-    saveUsers(users);
-  }
-
-  const hash = await hashPassword(password);
-  if (hash !== user.hash) return { ok: false, error: "Senha incorreta." };
-
-  const session = { id: user.id, friendId: user.friendId, name: user.name, email: user.email, avatar: user.avatar };
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-  return { ok: true, user: session };
+  const data = await api("/login", { email, password });
+  if (data.ok) saveSession(data.user, data.token);
+  return data;
 }
 
 export async function updateProfile({ name, avatarDataUrl }) {
-  const session = getSession();
-  if (!session) return { ok: false, error: "Não autenticado." };
-
-  const users = getUsers();
-  const user = users[session.email];
-  if (!user) return { ok: false, error: "Usuário não encontrado." };
-
-  if (name) user.name = name.trim();
-  if (avatarDataUrl !== undefined) user.avatar = avatarDataUrl;
-  users[session.email] = user;
-  saveUsers(users);
-
-  const updated = { ...session, name: user.name, avatar: user.avatar, friendId: user.friendId };
-  localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
-  return { ok: true, user: updated };
+  const data = await api("/update", { name, avatarDataUrl });
+  if (data.ok) saveSession(data.user, null);
+  return data;
 }
 
-/** Busca usuário pelo friendId público (número) */
-export function getUserByFriendId(friendId) {
-  const users = getUsers();
-  const normalized = String(friendId).trim();
-  const found = Object.values(users).find((u) => String(u.friendId) === normalized);
-  if (!found) return null;
-  return { id: found.id, friendId: found.friendId, name: found.name, avatar: found.avatar || null };
+export async function getUserByFriendId(friendId) {
+  const data = await api(`/search/${encodeURIComponent(friendId)}`, null, "GET");
+  if (!data.ok) return null;
+  return data.user;
 }

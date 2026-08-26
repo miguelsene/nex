@@ -146,13 +146,13 @@ export default function Dashboard() {
     setRequests(getFriendRequests(user.id).filter((r) => r.status === "pending"));
   }
 
-  function handleSearch(e) {
+  async function handleSearch(e) {
     e.preventDefault();
     setSearchMsg(null);
     setSearchResult(null);
     const id = searchId.trim();
     if (!id || id.length < 6) { setSearchMsg({ ok: false, text: "Digite um ID válido (9 dígitos)." }); return; }
-    const found = getUserByFriendId(id);
+    const found = await getUserByFriendId(id);
     if (!found) { setSearchMsg({ ok: false, text: "Nenhum usuário encontrado." }); return; }
     if (found.id === user.id) { setSearchMsg({ ok: false, text: "Esse é o seu próprio ID." }); return; }
     setSearchResult(found);

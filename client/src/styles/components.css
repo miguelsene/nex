@@ -508,3 +508,17 @@
   min-width: 20px;
   text-align: center;
 }
+
+.server-channel-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.server-channel-row .server-channel-item {
+  flex: 1;
+}
+
+.server-channel-row .icon-btn:hover {
+  color: var(--danger);
+}

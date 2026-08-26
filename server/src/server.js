@@ -10,6 +10,8 @@ import { Server } from "socket.io";
 import { roomManager } from "./rooms/roomManager.js";
 import { registerSocketHandlers } from "./socket/socketHandler.js";
 import { getIceServers } from "./signaling/iceConfig.js";
+import authRoutes from "./routes/authRoutes.js";
+import serverRoutes from "./routes/serverRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -50,7 +52,10 @@ app.use(
 );
 app.use(express.json());
 
-// --- Rotas HTTP simples (sem banco de dados, tudo em memória) ---
+// --- Rotas ---
+
+app.use("/api/auth", authRoutes);
+app.use("/api/servers", serverRoutes);
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, ...roomManager.getStats() });

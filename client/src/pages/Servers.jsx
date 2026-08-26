@@ -3,9 +3,18 @@ import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth.jsx";
 import { parseDice, hasDice } from "../utils/dice.js";
 import {
-  createServer, getMyServers, joinServer, leaveServer,
-  getServerMessages, sendServerMessage, addChannel, regenerateInvite,
+  getMyServers, createServer, joinServer, leaveServer,
+  editServer, getServerMessages, sendServerMessage,
+  addChannel, deleteChannel, regenerateInvite,
 } from "../services/servers.js";
+
+function formatDate(ts) {
+  const diff = Date.now() - ts;
+  if (diff < 60000) return "agora";
+  if (diff < 3600000) return `${Math.floor(diff / 60000)}min`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
+  return new Date(ts).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+}
 
 function DiceResult({ text }) {
   const groups = parseDice(text);
@@ -23,14 +32,6 @@ function DiceResult({ text }) {
       ))}
     </div>
   );
-}
-
-function formatDate(ts) {
-  const diff = Date.now() - ts;
-  if (diff < 60000) return "agora";
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}min`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
-  return new Date(ts).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 }
 
 function ServerIcon({ server, size = 44, active }) {
@@ -62,14 +63,16 @@ export default function Servers() {
   const [activeChannel, setActiveChannel] = useState(null);
   const [messages, setMessages] = useState([]);
   const [msgText, setMsgText] = useState("");
-  const [view, setView] = useState("channels"); // channels | members
-  const [modal, setModal] = useState(null); // null | create | join | invite | addChannel
+  const [view, setView] = useState("channels");
+  const [modal, setModal] = useState(null);
+  const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
+  const iconRef = useRef(null);
+  const editIconRef = useRef(null);
 
-  // Modal criar servidor
+  // Modal criar
   const [newName, setNewName] = useState("");
   const [newIcon, setNewIcon] = useState(null);
-  const iconRef = useRef(null);
 
   // Modal entrar
   const [inviteInput, setInviteInput] = useState("");
@@ -77,17 +80,24 @@ export default function Servers() {
 
   // Modal add canal
   const [newChName, setNewChName] = useState("");
+  const [newChType, setNewChType] = useState("text");
+
+  // Modal editar servidor
+  const [editName, setEditName] = useState("");
+  const [editIcon, setEditIcon] = useState(null);
+  const [editLoading, setEditLoading] = useState(false);
 
   if (!user) return <Navigate to="/auth" replace />;
 
-  function reload() {
-    const list = getMyServers(user.id);
+  async function reload(keepServer) {
+    const list = await getMyServers();
     setServers(list);
-    if (activeServer) {
-      const updated = list.find((s) => s.id === activeServer.id);
+    if (keepServer) {
+      const updated = list.find((s) => s.id === keepServer.id);
       setActiveServer(updated || null);
-      if (!updated) { setActiveChannel(null); setMessages([]); }
+      return updated;
     }
+    return null;
   }
 
   // eslint-disable-next-line react-hooks/rules-of-hooks
@@ -96,7 +106,7 @@ export default function Servers() {
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
     if (activeChannel && activeServer) {
-      setMessages(getServerMessages(activeServer.id, activeChannel.id));
+      getServerMessages(activeServer.id, activeChannel.id).then(setMessages);
     }
   }, [activeChannel, activeServer]);
 
@@ -105,28 +115,32 @@ export default function Servers() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  function selectServer(s) {
+  async function selectServer(s) {
     setActiveServer(s);
     const firstText = s.channels.find((c) => c.type === "text");
     setActiveChannel(firstText || null);
-    setMessages(firstText ? getServerMessages(s.id, firstText.id) : []);
+    setMessages(firstText ? await getServerMessages(s.id, firstText.id) : []);
     setView("channels");
   }
 
-  function selectChannel(ch) {
+  async function selectChannel(ch) {
+    if (ch.type === "voice") {
+      navigate(`/room/${activeServer.id.slice(0, 8)}-${ch.id.slice(0, 4)}`.toUpperCase(), { state: { name: user.name } });
+      return;
+    }
     setActiveChannel(ch);
-    setMessages(getServerMessages(activeServer.id, ch.id));
+    setMessages(await getServerMessages(activeServer.id, ch.id));
   }
 
-  function handleSendMsg(e) {
+  async function handleSendMsg(e) {
     e.preventDefault();
     if (!msgText.trim() || !activeChannel || !activeServer) return;
-    sendServerMessage(activeServer.id, activeChannel.id, user, msgText);
-    setMessages(getServerMessages(activeServer.id, activeChannel.id));
+    await sendServerMessage(activeServer.id, activeChannel.id, msgText);
+    setMessages(await getServerMessages(activeServer.id, activeChannel.id));
     setMsgText("");
   }
 
-  function handleIconChange(e) {
+  function handleIconChange(e, setter) {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
@@ -138,51 +152,75 @@ export default function Servers() {
         const ctx = canvas.getContext("2d");
         const size = Math.min(img.width, img.height);
         ctx.drawImage(img, (img.width - size) / 2, (img.height - size) / 2, size, size, 0, 0, 80, 80);
-        setNewIcon(canvas.toDataURL("image/jpeg", 0.7));
+        setter(canvas.toDataURL("image/jpeg", 0.7));
       };
       img.src = ev.target.result;
     };
     reader.readAsDataURL(file);
   }
 
-  function handleCreate(e) {
+  async function handleCreate(e) {
     e.preventDefault();
     if (!newName.trim()) return;
-    const s = createServer(user, newName, newIcon);
-    setModal(null); setNewName(""); setNewIcon(null);
-    reload();
-    selectServer(s);
+    setLoading(true);
+    try {
+      const s = await createServer(newName, newIcon);
+      setModal(null); setNewName(""); setNewIcon(null);
+      await reload();
+      selectServer(s);
+    } finally { setLoading(false); }
   }
 
-  function handleJoin(e) {
+  async function handleJoin(e) {
     e.preventDefault();
     setJoinError(null);
-    const result = joinServer(user, inviteInput);
+    const result = await joinServer(inviteInput);
     if (!result.ok) { setJoinError(result.error); return; }
     setModal(null); setInviteInput("");
-    reload();
+    await reload();
     selectServer(result.server);
   }
 
-  function handleAddChannel(e) {
+  async function handleAddChannel(e) {
     e.preventDefault();
     if (!newChName.trim()) return;
-    addChannel(activeServer.id, user.id, newChName);
-    setModal(null); setNewChName("");
-    reload();
+    await addChannel(activeServer.id, newChName, newChType);
+    setModal(null); setNewChName(""); setNewChType("text");
+    const updated = await reload(activeServer);
+    if (updated) setActiveServer(updated);
   }
 
-  function handleLeave() {
+  async function handleDeleteChannel(chId) {
+    await deleteChannel(activeServer.id, chId);
+    if (activeChannel?.id === chId) { setActiveChannel(null); setMessages([]); }
+    const updated = await reload(activeServer);
+    if (updated) setActiveServer(updated);
+  }
+
+  async function handleLeave() {
     if (!activeServer) return;
-    leaveServer(user.id, activeServer.id);
+    await leaveServer(activeServer.id);
     setActiveServer(null); setActiveChannel(null); setMessages([]);
     reload();
   }
 
-  function handleRegenInvite() {
+  async function handleRegenInvite() {
     if (!activeServer) return;
-    regenerateInvite(activeServer.id, user.id);
-    reload();
+    const code = await regenerateInvite(activeServer.id);
+    const updated = await reload(activeServer);
+    if (updated) setActiveServer(updated);
+  }
+
+  async function handleEditServer(e) {
+    e.preventDefault();
+    setEditLoading(true);
+    try {
+      const updated = await editServer(activeServer.id, { name: editName, iconDataUrl: editIcon !== null ? editIcon : undefined });
+      setModal(null); setEditIcon(null);
+      const list = await reload(activeServer);
+      if (list) setActiveServer(list);
+      else setActiveServer(updated);
+    } finally { setEditLoading(false); }
   }
 
   function copyInvite() {
@@ -190,13 +228,15 @@ export default function Servers() {
     navigator.clipboard.writeText(activeServer.inviteCode).catch(() => {});
   }
 
+  const isOwner = activeServer?.ownerId === user.id;
+
   return (
     <div className="servers-page">
       <div className="aurora-bg" aria-hidden="true">
         <div className="aurora-blob b1" /><div className="aurora-blob b2" />
       </div>
 
-      {/* Sidebar de servidores */}
+      {/* Sidebar */}
       <div className="servers-sidebar">
         <button className="server-icon-btn" onClick={() => navigate("/")} title="Início">
           <div className="server-icon-home"><i className="bi bi-house-fill" /></div>
@@ -221,10 +261,13 @@ export default function Servers() {
         <div className="server-channels-panel glass-card">
           <div className="server-channels-header">
             <span className="server-channels-name">{activeServer.name}</span>
-            <div style={{ display: "flex", gap: 6 }}>
+            <div style={{ display: "flex", gap: 4 }}>
               <button className="icon-btn" onClick={() => setModal("invite")} title="Convidar"><i className="bi bi-person-plus-fill" /></button>
-              {activeServer.ownerId === user.id && (
-                <button className="icon-btn" onClick={() => setModal("addChannel")} title="Novo canal"><i className="bi bi-plus-lg" /></button>
+              {isOwner && (
+                <>
+                  <button className="icon-btn" onClick={() => { setEditName(activeServer.name); setEditIcon(null); setModal("edit"); }} title="Editar servidor"><i className="bi bi-pencil-fill" /></button>
+                  <button className="icon-btn" onClick={() => setModal("addChannel")} title="Novo canal"><i className="bi bi-plus-lg" /></button>
+                </>
               )}
               <button className="icon-btn" onClick={() => setView(view === "members" ? "channels" : "members")} title="Membros">
                 <i className="bi bi-people-fill" />
@@ -234,16 +277,34 @@ export default function Servers() {
 
           {view === "channels" && (
             <div className="server-channel-list">
-              <div className="server-section-label">Canais de texto</div>
-              {activeServer.channels.filter((c) => c.type === "text").map((ch) => (
-                <button
-                  key={ch.id}
-                  className={`server-channel-item${activeChannel?.id === ch.id ? " active" : ""}`}
-                  onClick={() => selectChannel(ch)}
-                >
-                  <i className="bi bi-hash" /> {ch.name}
-                </button>
-              ))}
+              {["text", "voice"].map((type) => {
+                const chs = activeServer.channels.filter((c) => c.type === type);
+                if (!chs.length) return null;
+                return (
+                  <div key={type}>
+                    <div className="server-section-label">
+                      <i className={`bi ${type === "voice" ? "bi-volume-up-fill" : "bi-hash"}`} /> {type === "voice" ? "Canais de voz" : "Canais de texto"}
+                    </div>
+                    {chs.map((ch) => (
+                      <div key={ch.id} className="server-channel-row">
+                        <button
+                          className={`server-channel-item${activeChannel?.id === ch.id ? " active" : ""}`}
+                          onClick={() => selectChannel(ch)}
+                          style={{ flex: 1 }}
+                        >
+                          <i className={`bi ${ch.type === "voice" ? "bi-volume-up-fill" : "bi-hash"}`} /> {ch.name}
+                          {ch.type === "voice" && <span style={{ fontSize: "0.65rem", color: "var(--accent-cyan)", marginLeft: "auto" }}>entrar</span>}
+                        </button>
+                        {isOwner && (
+                          <button className="icon-btn" style={{ width: 24, height: 24, fontSize: "0.7rem", flexShrink: 0 }} onClick={() => handleDeleteChannel(ch.id)} title="Deletar canal">
+                            <i className="bi bi-trash3" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -261,7 +322,7 @@ export default function Servers() {
           )}
 
           <button className="server-leave-btn" onClick={handleLeave}>
-            <i className="bi bi-box-arrow-left" /> {activeServer.ownerId === user.id ? "Deletar servidor" : "Sair do servidor"}
+            <i className="bi bi-box-arrow-left" /> {isOwner ? "Deletar servidor" : "Sair do servidor"}
           </button>
         </div>
       ) : (
@@ -278,7 +339,7 @@ export default function Servers() {
       )}
 
       {/* Área de mensagens */}
-      {activeServer && activeChannel ? (
+      {activeServer && activeChannel && activeChannel.type === "text" ? (
         <div className="server-chat">
           <div className="server-chat-header">
             <i className="bi bi-hash" /> {activeChannel.name}
@@ -317,7 +378,7 @@ export default function Servers() {
         </div>
       ) : activeServer ? (
         <div className="server-chat" style={{ alignItems: "center", justifyContent: "center", display: "flex" }}>
-          <div className="dash-empty"><i className="bi bi-hash" /><p>Selecione um canal</p></div>
+          <div className="dash-empty"><i className="bi bi-hash" /><p>Selecione um canal de texto</p></div>
         </div>
       ) : null}
 
@@ -334,13 +395,38 @@ export default function Servers() {
                     <div className="avatar-upload-wrap" onClick={() => iconRef.current?.click()}>
                       {newIcon ? <img src={newIcon} alt="icon" className="avatar-upload-preview" /> : <div className="avatar-upload-placeholder"><i className="bi bi-image" /><span>Ícone</span></div>}
                     </div>
-                    <input ref={iconRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleIconChange} />
+                    <input ref={iconRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleIconChange(e, setNewIcon)} />
                   </div>
                   <div className="name-input-wrap">
                     <i className="bi bi-server" />
                     <input type="text" placeholder="Nome do servidor" value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={40} autoFocus />
                   </div>
-                  <button type="submit" className="btn btn-primary" disabled={!newName.trim()}>Criar</button>
+                  <button type="submit" className="btn btn-primary" disabled={!newName.trim() || loading}>
+                    {loading ? "Criando..." : "Criar"}
+                  </button>
+                </form>
+              </>
+            )}
+
+            {modal === "edit" && (
+              <>
+                <div className="modal-header"><h3>Editar servidor</h3><button className="icon-btn" onClick={() => setModal(null)}><i className="bi bi-x-lg" /></button></div>
+                <form onSubmit={handleEditServer} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "center" }}>
+                    <div className="avatar-upload-wrap" onClick={() => editIconRef.current?.click()}>
+                      {(editIcon || activeServer?.icon)
+                        ? <img src={editIcon || activeServer.icon} alt="icon" className="avatar-upload-preview" />
+                        : <div className="avatar-upload-placeholder"><i className="bi bi-image" /><span>Ícone</span></div>}
+                    </div>
+                    <input ref={editIconRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleIconChange(e, setEditIcon)} />
+                  </div>
+                  <div className="name-input-wrap">
+                    <i className="bi bi-server" />
+                    <input type="text" placeholder="Nome do servidor" value={editName} onChange={(e) => setEditName(e.target.value)} maxLength={40} autoFocus />
+                  </div>
+                  <button type="submit" className="btn btn-primary" disabled={!editName.trim() || editLoading}>
+                    {editLoading ? "Salvando..." : "Salvar"}
+                  </button>
                 </form>
               </>
             )}
@@ -362,12 +448,12 @@ export default function Servers() {
             {modal === "invite" && activeServer && (
               <>
                 <div className="modal-header"><h3>Convidar pessoas</h3><button className="icon-btn" onClick={() => setModal(null)}><i className="bi bi-x-lg" /></button></div>
-                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Compartilhe o código abaixo para convidar alguém para <strong>{activeServer.name}</strong>.</p>
+                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Compartilhe o código para convidar alguém para <strong>{activeServer.name}</strong>.</p>
                 <div className="invite-link-box">
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: "1.1rem", letterSpacing: "0.1em", color: "var(--accent-cyan)" }}>{activeServer.inviteCode}</span>
                   <button className="btn-ghost-sm" onClick={copyInvite}><i className="bi bi-clipboard" /> Copiar</button>
                 </div>
-                {activeServer.ownerId === user.id && (
+                {isOwner && (
                   <button className="btn-ghost-sm" onClick={handleRegenInvite} style={{ alignSelf: "flex-start" }}>
                     <i className="bi bi-arrow-repeat" /> Gerar novo código
                   </button>
@@ -379,8 +465,16 @@ export default function Servers() {
               <>
                 <div className="modal-header"><h3>Novo canal</h3><button className="icon-btn" onClick={() => setModal(null)}><i className="bi bi-x-lg" /></button></div>
                 <form onSubmit={handleAddChannel} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button type="button" className={newChType === "text" ? "btn btn-primary" : "btn-ghost-sm"} style={{ flex: 1, padding: "9px" }} onClick={() => setNewChType("text")}>
+                      <i className="bi bi-hash" /> Texto
+                    </button>
+                    <button type="button" className={newChType === "voice" ? "btn btn-primary" : "btn-ghost-sm"} style={{ flex: 1, padding: "9px" }} onClick={() => setNewChType("voice")}>
+                      <i className="bi bi-volume-up-fill" /> Voz
+                    </button>
+                  </div>
                   <div className="name-input-wrap">
-                    <i className="bi bi-hash" />
+                    <i className={`bi ${newChType === "voice" ? "bi-volume-up-fill" : "bi-hash"}`} />
                     <input type="text" placeholder="nome-do-canal" value={newChName} onChange={(e) => setNewChName(e.target.value.toLowerCase().replace(/\s+/g, "-"))} maxLength={30} autoFocus />
                   </div>
                   <button type="submit" className="btn btn-primary" disabled={!newChName.trim()}>Criar canal</button>
