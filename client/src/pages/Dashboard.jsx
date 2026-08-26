@@ -1,6 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth.jsx";
+import { parseDice, hasDice } from "../utils/dice.js";
+
+function DiceResult({ text }) {
+  const groups = parseDice(text);
+  if (!groups.length) return null;
+  return (
+    <div className="dice-result">
+      <i className="bi bi-dice-5-fill" style={{ color: "var(--accent-cyan)", fontSize: "0.85rem" }} />
+      {groups.map((g, i) => (
+        <span key={i} className="dice-group">
+          <span className="dice-expr">{g.expr}</span>
+          <span className="dice-rolls">[{g.rolls.join(", ")}]{g.mod !== 0 ? ` ${g.mod > 0 ? "+" : ""}${g.mod}` : ""}</span>
+          <span className="dice-total">{g.sum}</span>
+          {i < groups.length - 1 && <span style={{ color: "var(--text-muted)" }}> · </span>}
+        </span>
+      ))}
+    </div>
+  );
+}
 import {
   getCallHistory, getContacts, removeContact,
   getDMs, sendDM, getFriendRequests,
@@ -444,13 +463,14 @@ export default function Dashboard() {
               {dmMessages.map((m) => (
                 <div key={m.id} className={`dm-msg${m.fromId === user.id ? " own" : ""}`}>
                   <span className="dm-bubble">{m.text}</span>
+                  {hasDice(m.text) && <DiceResult text={m.text} />}
                   <span className="dm-time">{formatDate(m.at)}</span>
                 </div>
               ))}
               <div ref={messagesEndRef} />
             </div>
             <form className="dash-dm-input" onSubmit={handleSendDM}>
-              <input value={dmText} onChange={(e) => setDmText(e.target.value)} placeholder={`Mensagem para ${dmContact.name}...`} maxLength={500} />
+              <input value={dmText} onChange={(e) => setDmText(e.target.value)} placeholder={`Mensagem ou 2d6+3 para dados...`} maxLength={500} />
               <button type="submit" disabled={!dmText.trim()}><i className="bi bi-send-fill" /></button>
             </form>
           </div>

@@ -468,3 +468,43 @@
     border-right: 1px solid var(--border-subtle);
   }
 }
+
+/* --- Dados de RPG --- */
+.dice-result {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(34, 211, 238, 0.07);
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  font-size: 0.78rem;
+}
+
+.dice-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.dice-expr {
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.dice-rolls {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.dice-total {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--accent-cyan);
+  min-width: 20px;
+  text-align: center;
+}

@@ -1,10 +1,29 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth.jsx";
+import { parseDice, hasDice } from "../utils/dice.js";
 import {
   createServer, getMyServers, joinServer, leaveServer,
   getServerMessages, sendServerMessage, addChannel, regenerateInvite,
 } from "../services/servers.js";
+
+function DiceResult({ text }) {
+  const groups = parseDice(text);
+  if (!groups.length) return null;
+  return (
+    <div className="dice-result">
+      <i className="bi bi-dice-5-fill" style={{ color: "var(--accent-cyan)", fontSize: "0.85rem" }} />
+      {groups.map((g, i) => (
+        <span key={i} className="dice-group">
+          <span className="dice-expr">{g.expr}</span>
+          <span className="dice-rolls">[{g.rolls.join(", ")}]{g.mod !== 0 ? ` ${g.mod > 0 ? "+" : ""}${g.mod}` : ""}</span>
+          <span className="dice-total">{g.sum}</span>
+          {i < groups.length - 1 && <span style={{ color: "var(--text-muted)" }}> · </span>}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 function formatDate(ts) {
   const diff = Date.now() - ts;
@@ -280,6 +299,7 @@ export default function Servers() {
                     <span className="server-msg-time">{formatDate(m.at)}</span>
                   </div>
                   <div className="server-msg-text">{m.text}</div>
+                  {hasDice(m.text) && <DiceResult text={m.text} />}
                 </div>
               </div>
             ))}
