@@ -92,6 +92,13 @@ export function registerSocketHandlers(io, socket) {
     socket.to(currentRoomId).emit("speaking", { id: socket.id, isSpeaking: !!isSpeaking });
   });
 
+  // --- Música compartilhada (YouTube) ---
+  socket.on("music-update", (data) => {
+    if (!currentRoomId) return;
+    // Repassa para todos os outros na sala
+    socket.to(currentRoomId).emit("music-update", data);
+  });
+
   // --- Chat (somente em memória, dura enquanto a sala existir) ---
   socket.on("chat-message", ({ text }) => {
     if (!currentRoomId || typeof text !== "string") return;

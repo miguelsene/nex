@@ -17,6 +17,7 @@ import ParticipantList from "../components/ParticipantList.jsx";
 import Chat from "../components/Chat.jsx";
 import InviteModal from "../components/InviteModal.jsx";
 import SettingsModal from "../components/SettingsModal.jsx";
+import MusicPlayer from "../components/MusicPlayer.jsx";
 import ThemePicker from "../components/ThemePicker.jsx";
 
 export default function Room() {
@@ -433,6 +434,14 @@ function CallExperience({ roomId, name }) {
             messages={webrtc.messages}
             selfId={webrtc.selfId}
             onSend={webrtc.sendChatMessage}
+            onClose={() => setActivePanel(null)}
+          />
+        )}
+
+        {activePanel === "music" && (
+          <MusicPlayer
+            socket={socket}
+            isHost={remoteParticipants.length === 0 || webrtc.selfId === Array.from(webrtc.participants.keys())[0]}
             onClose={() => setActivePanel(null)}
           />
         )}

@@ -36,10 +36,8 @@ export function logout() {
 }
 
 function generateFriendId() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let id = "";
-  for (let i = 0; i < 8; i++) id += chars[Math.floor(Math.random() * chars.length)];
-  return id;
+  // ID numérico de 9 dígitos, começando sempre com dígito não-zero
+  return String(Math.floor(100000000 + Math.random() * 900000000));
 }
 
 export async function register({ name, email, password, avatarDataUrl }) {
@@ -92,15 +90,16 @@ export async function updateProfile({ name, avatarDataUrl }) {
   users[session.email] = user;
   saveUsers(users);
 
-  const updated = { ...session, name: user.name, avatar: user.avatar };
+  const updated = { ...session, name: user.name, avatar: user.avatar, friendId: user.friendId };
   localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
   return { ok: true, user: updated };
 }
 
-/** Busca usuário pelo friendId público */
+/** Busca usuário pelo friendId público (número) */
 export function getUserByFriendId(friendId) {
   const users = getUsers();
-  const found = Object.values(users).find((u) => u.friendId === friendId.toUpperCase().trim());
+  const normalized = String(friendId).trim();
+  const found = Object.values(users).find((u) => String(u.friendId) === normalized);
   if (!found) return null;
   return { id: found.id, friendId: found.friendId, name: found.name, avatar: found.avatar || null };
 }
