@@ -56,7 +56,7 @@ function Avatar({ src, name, size = 32 }) {
 }
 
 export default function Servers() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [servers, setServers] = useState([]);
   const [activeServer, setActiveServer] = useState(null);
@@ -172,7 +172,13 @@ export default function Servers() {
       setModal(null); setNewName(""); setNewIcon(null);
       reload(s).catch(() => {});
     } catch (error) {
-      setCreateError(error.message || "Não foi possível criar o servidor. Tente novamente.");
+      const message = error.message || "Não foi possível criar o servidor. Tente novamente.";
+      if (message.toLowerCase().includes("autentic")) {
+        logout();
+        navigate("/auth", { replace: true });
+        return;
+      }
+      setCreateError(message);
     } finally { setLoading(false); }
   }
 

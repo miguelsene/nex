@@ -4,6 +4,8 @@ const SESSION_KEY = "nexa_session";
 const TOKEN_KEY = "nexa_token";
 
 export function getSession() {
+  // Um perfil salvo sem JWT não pode acessar rotas protegidas.
+  if (!getToken()) return null;
   try { return JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); } catch { return null; }
 }
 

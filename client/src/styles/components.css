@@ -28,18 +28,19 @@
   padding: 24px;
 }
 .app-loader__glow { position: absolute; width: min(72vw, 620px); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle, rgba(124, 92, 252, .28), rgba(34, 211, 238, .08) 42%, transparent 70%); filter: blur(12px); animation: loader-glow 3s ease-in-out infinite alternate; }
-.app-loader__logo, .initial-loader__logo { position: relative; z-index: 1; width: 94px; height: 94px; border-radius: 24px; object-fit: cover; box-shadow: 0 0 42px rgba(124, 92, 252, .5); animation: loader-logo 1.8s ease-in-out infinite; }
+.app-loader__logo, .initial-loader__logo { position: relative; z-index: 1; width: 94px; height: 94px; object-fit: contain; }
 .app-loader h1, .initial-loader strong { position: relative; z-index: 1; color: #fff; font-size: 1.8rem; }
 .app-loader p, .initial-loader p { position: relative; z-index: 1; max-width: 34ch; min-height: 1.6em; font-size: .95rem; }
 .app-loader__bar { position: relative; z-index: 1; width: min(230px, 65vw); height: 4px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.12); }
 .app-loader__bar span { display: block; width: 45%; height: 100%; border-radius: inherit; background: var(--gradient-aurora); animation: loader-progress 1.2s ease-in-out infinite; }
 .initial-loader__spinner { width: 28px; height: 28px; border: 3px solid rgba(255,255,255,.15); border-top-color: #22d3ee; border-radius: 50%; animation: spin .8s linear infinite; }
-.rpg-loader > img { border-radius: 20px; object-fit: cover; box-shadow: 0 0 38px rgba(124, 92, 252, .45); animation: loader-logo 1.8s ease-in-out infinite; }
+.rpg-loader > img { object-fit: contain; }
 .rpg-loader .spinner + p::after { content: "\A Os dados já estão rolando na mesa."; white-space: pre; display: block; margin-top: 5px; font-size: .8rem; color: var(--text-muted); }
-@keyframes loader-logo { 50% { transform: translateY(-5px) scale(1.025); } }
 @keyframes loader-glow { to { transform: scale(1.13); opacity: .7; } }
 @keyframes loader-progress { from { transform: translateX(-115%); } to { transform: translateX(330%); } }
 .install-app-button { display: inline-flex; align-items: center; gap: 6px; }
+.install-app-wrap { position: relative; }
+.install-app-help { position: absolute; z-index: 10; top: calc(100% + 8px); right: 0; width: min(270px, 72vw); padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 10px; background: #171b2a; box-shadow: var(--shadow-soft); color: var(--text-secondary); font-size: .78rem; line-height: 1.45; }
 .app-installed { display: inline-flex; align-items: center; gap: 6px; color: var(--accent-cyan); font-size: .78rem; }
 
 .spinner {
