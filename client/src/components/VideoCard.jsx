@@ -15,7 +15,9 @@ export default function VideoCard({
   volume = 1,
   isPinned = false,
   compact = false,
+  focusMode = false,
   onTogglePin,
+  onToggleFocus,
   onOpenMenu,
 }) {
   const videoRef = useRef(null);
@@ -110,6 +112,20 @@ export default function VideoCard({
       >
         <i className={`bi ${isPinned ? "bi-fullscreen-exit" : "bi-arrows-fullscreen"}`} />
       </button>
+
+      {isPinned && (
+        <button
+          type="button"
+          className="video-focus-btn"
+          data-tooltip={focusMode ? "Mostrar participantes" : "Ocultar participantes"}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleFocus?.();
+          }}
+        >
+          <i className={`bi ${focusMode ? "bi-layout-sidebar-inset" : "bi-person-video2"}`} />
+        </button>
+      )}
 
       <div className="video-card-tag">
         <i className={`bi ${micOn ? "bi-mic-fill" : "bi-mic-mute-fill"} mic-icon ${!micOn ? "muted" : ""}`} />

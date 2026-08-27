@@ -5,14 +5,18 @@ export default function VideoGrid({
   remoteParticipants,
   speakerId,
   pinnedId = null,
+  hideUnpinned = false,
   participantVolumes = {},
   onTogglePin,
+  onToggleFocus,
   onOpenParticipantMenu,
 }) {
   const all = [self, ...remoteParticipants];
   const count = all.length;
   const pinned = pinnedId ? all.find((p) => p.id === pinnedId) : null;
-  const visible = pinned ? [pinned, ...all.filter((p) => p.id !== pinned.id)] : all;
+  const visible = pinned
+    ? [pinned, ...(hideUnpinned ? [] : all.filter((p) => p.id !== pinned.id))]
+    : all;
 
   return (
     <div className={["video-grid", pinned ? "has-pinned" : ""].filter(Boolean).join(" ")} data-count={Math.min(count, 9)}>
@@ -32,7 +36,9 @@ export default function VideoGrid({
           volume={participantVolumes[p.id] ?? 1}
           isPinned={pinned?.id === p.id}
           compact={Boolean(pinned && index > 0)}
+          focusMode={Boolean(pinned && hideUnpinned)}
           onTogglePin={() => onTogglePin?.(p.id)}
+          onToggleFocus={onToggleFocus}
           onOpenMenu={onOpenParticipantMenu}
         />
       ))}

@@ -20,6 +20,7 @@ import SettingsModal from "../components/SettingsModal.jsx";
 import MusicPlayer from "../components/MusicPlayer.jsx";
 import NexLogo from "../components/NexLogo.jsx";
 import ThemePicker from "../components/ThemePicker.jsx";
+import Home from "./Home.jsx";
 
 export default function Room() {
   const { roomId } = useParams();
@@ -161,6 +162,8 @@ function CallExperience({ roomId, name }) {
   const [participantVolumes, setParticipantVolumes] = useState({});
   const [participantMenu, setParticipantMenu] = useState(null);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [hideUnpinned, setHideUnpinned] = useState(false);
+  const [hudVisible, setHudVisible] = useState(true);
   const [localSpeaking, setLocalSpeaking] = useState(false);
   const [toasts, setToasts] = useState([]);
   const [unreadChat, setUnreadChat] = useState(0);
@@ -235,12 +238,52 @@ function CallExperience({ roomId, name }) {
     };
   }, [participantMenu]);
 
+  useEffect(() => {
+    if (!pinnedParticipantId || activePanel || participantMenu || showInvite || showSettings) {
+      setHudVisible(true);
+      return;
+    }
+
+    let hideTimer;
+    const showHud = () => {
+      setHudVisible(true);
+      window.clearTimeout(hideTimer);
+      hideTimer = window.setTimeout(() => setHudVisible(false), 2200);
+    };
+
+    showHud();
+    window.addEventListener("mousemove", showHud);
+    window.addEventListener("touchstart", showHud);
+    window.addEventListener("keydown", showHud);
+    return () => {
+      window.clearTimeout(hideTimer);
+      window.removeEventListener("mousemove", showHud);
+      window.removeEventListener("touchstart", showHud);
+      window.removeEventListener("keydown", showHud);
+    };
+  }, [pinnedParticipantId, activePanel, participantMenu, showInvite, showSettings]);
+
   function togglePanel(panel) {
     setActivePanel((prev) => (prev === panel ? null : panel));
   }
 
   function togglePinnedParticipant(participantId) {
     setPinnedParticipantId((current) => (current === participantId ? null : participantId));
+  }
+
+  function minimizeCall() {
+    setActivePanel(null);
+    setParticipantMenu(null);
+    setShowInvite(false);
+    setShowSettings(false);
+    setIsMinimized(true);
+    sessionStorage.setItem("nexa_active_call", JSON.stringify({ roomId: normalizedRoomId, name, at: Date.now() }));
+    window.history.pushState({}, "", "/");
+  }
+
+  function restoreCall() {
+    setIsMinimized(false);
+    window.history.pushState({}, "", `/room/${normalizedRoomId}`);
   }
 
   function handleOpenParticipantMenu({ event, participant }) {
@@ -400,7 +443,17 @@ function CallExperience({ roomId, name }) {
   }
 
   return (
-    <div className={["room", isMinimized ? "is-minimized" : ""].filter(Boolean).join(" ")}>
+    <>
+      {isMinimized && <Home />}
+      <div
+        className={[
+          "room",
+          isMinimized ? "is-minimized" : "",
+          pinnedParticipantId && !hudVisible ? "hud-hidden" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
       <div className="room-topbar">
         <div className="brand">
           <span className="brand-mark">
@@ -466,8 +519,10 @@ function CallExperience({ roomId, name }) {
                   remoteParticipants={[]}
                   speakerId={speakerId}
                   pinnedId={pinnedParticipantId}
+                  hideUnpinned={hideUnpinned}
                   participantVolumes={participantVolumes}
                   onTogglePin={togglePinnedParticipant}
+                  onToggleFocus={() => setHideUnpinned((value) => !value)}
                   onOpenParticipantMenu={handleOpenParticipantMenu}
                 />
               </div>
@@ -478,8 +533,10 @@ function CallExperience({ roomId, name }) {
               remoteParticipants={remoteParticipants}
               speakerId={speakerId}
               pinnedId={pinnedParticipantId}
+              hideUnpinned={hideUnpinned}
               participantVolumes={participantVolumes}
               onTogglePin={togglePinnedParticipant}
+              onToggleFocus={() => setHideUnpinned((value) => !value)}
               onOpenParticipantMenu={handleOpenParticipantMenu}
             />
           )}
@@ -524,11 +581,7 @@ function CallExperience({ roomId, name }) {
         onTogglePanel={togglePanel}
         onOpenInvite={() => setShowInvite(true)}
         onOpenSettings={() => setShowSettings(true)}
-        onMinimize={() => {
-          setActivePanel(null);
-          setParticipantMenu(null);
-          setIsMinimized(true);
-        }}
+        onMinimize={minimizeCall}
         onLeave={handleLeave}
       />
 
@@ -548,7 +601,7 @@ function CallExperience({ roomId, name }) {
             <button type="button" className="icon-btn" data-tooltip="Painel" onClick={() => openAppPage("/dashboard")}>
               <i className="bi bi-grid-fill" />
             </button>
-            <button type="button" className="icon-btn" data-tooltip="Restaurar" onClick={() => setIsMinimized(false)}>
+            <button type="button" className="icon-btn" data-tooltip="Restaurar" onClick={restoreCall}>
               <i className="bi bi-arrows-fullscreen" />
             </button>
             <button type="button" className="icon-btn danger" data-tooltip="Sair" onClick={handleLeave}>
@@ -574,6 +627,12 @@ function CallExperience({ roomId, name }) {
             <i className="bi bi-arrows-fullscreen" />
             {pinnedParticipantId === participantMenu.participant.id ? "Restaurar grade" : "Maximizar tela"}
           </button>
+          {pinnedParticipantId === participantMenu.participant.id && (
+            <button type="button" onClick={() => setHideUnpinned((value) => !value)}>
+              <i className="bi bi-person-video2" />
+              {hideUnpinned ? "Mostrar participantes" : "Ocultar participantes"}
+            </button>
+          )}
           <label className={participantMenu.participant.isLocal ? "disabled" : ""}>
             <span>
               <i className="bi bi-volume-up-fill" /> Volume
@@ -606,6 +665,7 @@ function CallExperience({ roomId, name }) {
           onClose={() => setShowSettings(false)}
         />
       )}
-    </div>
+      </div>
+    </>
   );
 }

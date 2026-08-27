@@ -180,6 +180,12 @@
   background: #05060b;
 }
 
+.video-card.is-pinned video,
+.video-card.is-pinned.mirrored video,
+.video-card.is-pinned .avatar-fallback {
+  object-fit: contain;
+}
+
 .video-card.mirrored video {
   transform: scaleX(-1);
 }
@@ -288,13 +294,34 @@
   transition: opacity var(--transition-fast), transform var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
 }
 
+.video-focus-btn {
+  position: absolute;
+  right: 52px;
+  bottom: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle);
+  background: rgba(5, 6, 11, 0.62);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity var(--transition-fast), transform var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
+}
+
 .video-card:hover .video-pin-btn,
-.video-card.is-pinned .video-pin-btn {
+.video-card.is-pinned .video-pin-btn,
+.video-card:hover .video-focus-btn,
+.video-card.is-pinned .video-focus-btn {
   opacity: 1;
   transform: translateY(0);
 }
 
-.video-pin-btn:hover {
+.video-pin-btn:hover,
+.video-focus-btn:hover {
   background: rgba(255, 255, 255, 0.12);
   color: var(--text-primary);
 }
@@ -375,6 +402,33 @@
   gap: 10px;
   padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
   flex-wrap: wrap;
+}
+
+.room-topbar,
+.control-bar,
+.video-card-tag,
+.video-card-badge,
+.video-pin-btn,
+.video-focus-btn {
+  transition: opacity 420ms ease, transform 420ms ease;
+}
+
+.room.hud-hidden .room-topbar,
+.room.hud-hidden .control-bar,
+.room.hud-hidden .video-card-tag,
+.room.hud-hidden .video-card-badge,
+.room.hud-hidden .video-pin-btn,
+.room.hud-hidden .video-focus-btn {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.room.hud-hidden .room-topbar {
+  transform: translateY(-12px);
+}
+
+.room.hud-hidden .control-bar {
+  transform: translateY(12px);
 }
 
 .control-btn {
@@ -520,11 +574,15 @@
 }
 
 .room.is-minimized {
-  height: auto;
+  position: fixed;
+  inset: 0;
+  height: 100vh;
+  height: 100dvh;
   min-height: 0;
   overflow: visible;
   pointer-events: none;
   background: transparent;
+  z-index: 40;
 }
 
 .room.is-minimized .mini-call,
@@ -1023,6 +1081,14 @@
   }
 
   .video-pin-btn {
+    opacity: 1;
+    transform: none;
+    width: 32px;
+    height: 32px;
+  }
+
+  .video-focus-btn {
+    right: 50px;
     opacity: 1;
     transform: none;
     width: 32px;
