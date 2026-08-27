@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import Home from "./pages/Home.jsx";
-import Room from "./pages/Room.jsx";
+import Room, { CallExperience } from "./pages/Room.jsx";
 import AuthPage from "./pages/AuthPage.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import Servers from "./pages/Servers.jsx";
@@ -10,6 +10,7 @@ import LoadingScreen from "./components/LoadingScreen.jsx";
 
 export default function App() {
   const [starting, setStarting] = useState(true);
+  const [activeCall, setActiveCall] = useState(null);
 
   useEffect(() => {
     const ready = () => window.setTimeout(() => setStarting(false), 450);
@@ -27,9 +28,19 @@ export default function App() {
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/servers" element={<Servers />} />
-        <Route path="/room/:roomId" element={<Room />} />
+        <Route path="/room/:roomId" element={<Room activeCall={activeCall} onStartCall={setActiveCall} />} />
         <Route path="*" element={<div className="not-found"><h1>404</h1><p>Esta página não existe.</p><a href="/" className="btn btn-primary">Voltar para o início</a></div>} />
       </Routes>
+
+      {activeCall && (
+        <CallExperience
+          roomId={activeCall.roomId}
+          name={activeCall.name}
+          minimized={activeCall.minimized}
+          onMinimizedChange={(minimized) => setActiveCall((call) => call ? { ...call, minimized } : call)}
+          onEnded={() => setActiveCall(null)}
+        />
+      )}
     </AuthProvider>
   );
 }

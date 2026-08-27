@@ -20,9 +20,8 @@ import SettingsModal from "../components/SettingsModal.jsx";
 import MusicPlayer from "../components/MusicPlayer.jsx";
 import NexLogo from "../components/NexLogo.jsx";
 import ThemePicker from "../components/ThemePicker.jsx";
-import Home from "./Home.jsx";
 
-export default function Room() {
+export default function Room({ activeCall, onStartCall }) {
   const { roomId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -33,7 +32,37 @@ export default function Room() {
     return <JoinScreen roomId={roomId} onJoined={setConfirmedName} />;
   }
 
+  if (onStartCall) {
+    return (
+      <StartPersistentCall
+        activeCall={activeCall}
+        roomId={roomId}
+        name={confirmedName}
+        onStartCall={onStartCall}
+      />
+    );
+  }
+
   return <CallExperience roomId={roomId} name={confirmedName} />;
+}
+
+function StartPersistentCall({ activeCall, roomId, name, onStartCall }) {
+  const normalizedRoomId = roomId.toUpperCase();
+
+  useEffect(() => {
+    if (activeCall?.roomId === normalizedRoomId) return;
+    onStartCall({ roomId: normalizedRoomId, name, minimized: false });
+  }, [activeCall?.roomId, name, normalizedRoomId, onStartCall]);
+
+  if (activeCall?.roomId === normalizedRoomId) return null;
+
+  return (
+    <div className="full-screen-loader rpg-loader">
+      <NexLogo size={76} />
+      <div className="spinner" />
+      <p>Abrindo chamada...</p>
+    </div>
+  );
 }
 
 /* ---------------------------------------------------------------------- */
@@ -144,7 +173,7 @@ function JoinScreen({ roomId, onJoined }) {
 /* Experiência da chamada em si                                          */
 /* ---------------------------------------------------------------------- */
 
-function CallExperience({ roomId, name }) {
+export function CallExperience({ roomId, name, minimized = false, onMinimizedChange, onEnded }) {
   const navigate = useNavigate();
   const normalizedRoomId = roomId.toUpperCase();
   const { user } = useAuth();
@@ -161,13 +190,25 @@ function CallExperience({ roomId, name }) {
   const [pinnedParticipantId, setPinnedParticipantId] = useState(null);
   const [participantVolumes, setParticipantVolumes] = useState({});
   const [participantMenu, setParticipantMenu] = useState(null);
-  const [isMinimized, setIsMinimized] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(minimized);
   const [hideUnpinned, setHideUnpinned] = useState(false);
   const [hudVisible, setHudVisible] = useState(true);
   const [localSpeaking, setLocalSpeaking] = useState(false);
   const [toasts, setToasts] = useState([]);
   const [unreadChat, setUnreadChat] = useState(0);
   const toastIdRef = useRef(0);
+
+  useEffect(() => {
+    setIsMinimized(minimized);
+  }, [minimized]);
+
+  const setMinimizedState = useCallback(
+    (value) => {
+      setIsMinimized(value);
+      onMinimizedChange?.(value);
+    },
+    [onMinimizedChange]
+  );
 
   useEffect(() => {
     fetchIceConfig()
@@ -276,14 +317,14 @@ function CallExperience({ roomId, name }) {
     setParticipantMenu(null);
     setShowInvite(false);
     setShowSettings(false);
-    setIsMinimized(true);
+    setMinimizedState(true);
     sessionStorage.setItem("nexa_active_call", JSON.stringify({ roomId: normalizedRoomId, name, at: Date.now() }));
-    window.history.pushState({}, "", "/");
+    navigate("/");
   }
 
   function restoreCall() {
-    setIsMinimized(false);
-    window.history.pushState({}, "", `/room/${normalizedRoomId}`);
+    setMinimizedState(false);
+    navigate(`/room/${normalizedRoomId}`, { state: { name } });
   }
 
   function handleOpenParticipantMenu({ event, participant }) {
@@ -302,9 +343,13 @@ function CallExperience({ roomId, name }) {
     window.open(path, "_blank", "noopener,noreferrer");
   }
 
-  function handleToggleMic() {
-    media.toggleMic();
-    webrtc.broadcastMicState(!media.micOn);
+  async function handleToggleMic() {
+    const nextMicOn = !media.micOn;
+    const audioTrack = await media.toggleMic();
+    if (audioTrack) {
+      webrtc.replaceOutgoingTrack("audio", audioTrack);
+    }
+    webrtc.broadcastMicState(nextMicOn);
   }
 
   function handleToggleCam() {
@@ -356,6 +401,7 @@ function CallExperience({ roomId, name }) {
     sessionStorage.setItem("nexa_last_room", JSON.stringify({ roomId: normalizedRoomId, name, at: Date.now() }));
     socket.emit("leave-room");
     socket.disconnect();
+    onEnded?.();
     navigate("/");
   }
 
@@ -444,7 +490,6 @@ function CallExperience({ roomId, name }) {
 
   return (
     <>
-      {isMinimized && <Home />}
       <div
         className={[
           "room",
