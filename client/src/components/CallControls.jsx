@@ -2,7 +2,7 @@ export default function CallControls({
   micOn, camOn, isSharingScreen, activePanel,
   participantCount, unreadChatCount,
   onToggleMic, onToggleCam, onToggleScreenShare,
-  onTogglePanel, onOpenInvite, onOpenSettings, onLeave,
+  onTogglePanel, onOpenInvite, onOpenSettings, onMinimize, onLeave,
 }) {
   return (
     <div className="control-bar">
@@ -14,6 +14,10 @@ export default function CallControls({
       </button>
       <button type="button" className={`control-btn ${isSharingScreen ? "active" : ""}`} data-tooltip={isSharingScreen ? "Parar compartilhamento" : "Compartilhar tela"} onClick={onToggleScreenShare}>
         <i className="bi bi-display" />
+      </button>
+
+      <button type="button" className="control-btn" data-tooltip="Minimizar chamada" onClick={onMinimize}>
+        <i className="bi bi-pip-fill" />
       </button>
 
       <div className="control-divider" />

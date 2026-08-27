@@ -157,6 +157,10 @@ function CallExperience({ roomId, name }) {
   const [showInvite, setShowInvite] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [speakerId, setSpeakerId] = useState(null);
+  const [pinnedParticipantId, setPinnedParticipantId] = useState(null);
+  const [participantVolumes, setParticipantVolumes] = useState({});
+  const [participantMenu, setParticipantMenu] = useState(null);
+  const [isMinimized, setIsMinimized] = useState(false);
   const [localSpeaking, setLocalSpeaking] = useState(false);
   const [toasts, setToasts] = useState([]);
   const [unreadChat, setUnreadChat] = useState(0);
@@ -220,8 +224,39 @@ function CallExperience({ roomId, name }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [webrtc.messages.length]);
 
+  useEffect(() => {
+    if (!participantMenu) return;
+    const closeMenu = () => setParticipantMenu(null);
+    window.addEventListener("click", closeMenu);
+    window.addEventListener("resize", closeMenu);
+    return () => {
+      window.removeEventListener("click", closeMenu);
+      window.removeEventListener("resize", closeMenu);
+    };
+  }, [participantMenu]);
+
   function togglePanel(panel) {
     setActivePanel((prev) => (prev === panel ? null : panel));
+  }
+
+  function togglePinnedParticipant(participantId) {
+    setPinnedParticipantId((current) => (current === participantId ? null : participantId));
+  }
+
+  function handleOpenParticipantMenu({ event, participant }) {
+    setParticipantMenu({
+      participant,
+      x: Math.min(event.clientX, window.innerWidth - 260),
+      y: Math.min(event.clientY, window.innerHeight - 220),
+    });
+  }
+
+  function handleParticipantVolume(participantId, value) {
+    setParticipantVolumes((current) => ({ ...current, [participantId]: Number(value) }));
+  }
+
+  function openAppPage(path) {
+    window.open(path, "_blank", "noopener,noreferrer");
   }
 
   function handleToggleMic() {
@@ -365,7 +400,7 @@ function CallExperience({ roomId, name }) {
   }
 
   return (
-    <div className="room">
+    <div className={["room", isMinimized ? "is-minimized" : ""].filter(Boolean).join(" ")}>
       <div className="room-topbar">
         <div className="brand">
           <span className="brand-mark">
@@ -375,6 +410,15 @@ function CallExperience({ roomId, name }) {
         </div>
 
         <div className="room-meta">
+          <button type="button" className="topbar-icon-btn" data-tooltip="InÃ­cio" onClick={() => openAppPage("/")}>
+            <i className="bi bi-house-fill" />
+          </button>
+          <button type="button" className="topbar-icon-btn" data-tooltip="Painel" onClick={() => openAppPage("/dashboard")}>
+            <i className="bi bi-grid-fill" />
+          </button>
+          <button type="button" className="topbar-icon-btn" data-tooltip="Servidores" onClick={() => openAppPage("/servers")}>
+            <i className="bi bi-server" />
+          </button>
           <ThemePicker />
           <div className="room-code-pill">
             <i className="bi bi-hash" />
@@ -417,11 +461,27 @@ function CallExperience({ roomId, name }) {
                 <i className="bi bi-link-45deg" /> Copiar link do convite
               </button>
               <div style={{ maxWidth: 340, width: "100%" }}>
-                <VideoGrid self={selfForGrid} remoteParticipants={[]} speakerId={speakerId} />
+                <VideoGrid
+                  self={selfForGrid}
+                  remoteParticipants={[]}
+                  speakerId={speakerId}
+                  pinnedId={pinnedParticipantId}
+                  participantVolumes={participantVolumes}
+                  onTogglePin={togglePinnedParticipant}
+                  onOpenParticipantMenu={handleOpenParticipantMenu}
+                />
               </div>
             </div>
           ) : (
-            <VideoGrid self={selfForGrid} remoteParticipants={remoteParticipants} speakerId={speakerId} />
+            <VideoGrid
+              self={selfForGrid}
+              remoteParticipants={remoteParticipants}
+              speakerId={speakerId}
+              pinnedId={pinnedParticipantId}
+              participantVolumes={participantVolumes}
+              onTogglePin={togglePinnedParticipant}
+              onOpenParticipantMenu={handleOpenParticipantMenu}
+            />
           )}
         </div>
 
@@ -464,8 +524,73 @@ function CallExperience({ roomId, name }) {
         onTogglePanel={togglePanel}
         onOpenInvite={() => setShowInvite(true)}
         onOpenSettings={() => setShowSettings(true)}
+        onMinimize={() => {
+          setActivePanel(null);
+          setParticipantMenu(null);
+          setIsMinimized(true);
+        }}
         onLeave={handleLeave}
       />
+
+      {isMinimized && (
+        <div className="mini-call glass-card">
+          <div className="mini-call-info">
+            <i className="bi bi-camera-video-fill" />
+            <div>
+              <strong>Sala {normalizedRoomId}</strong>
+              <span>{remoteParticipants.length + 1} na chamada</span>
+            </div>
+          </div>
+          <div className="mini-call-actions">
+            <button type="button" className="icon-btn" data-tooltip="InÃ­cio" onClick={() => openAppPage("/")}>
+              <i className="bi bi-house-fill" />
+            </button>
+            <button type="button" className="icon-btn" data-tooltip="Painel" onClick={() => openAppPage("/dashboard")}>
+              <i className="bi bi-grid-fill" />
+            </button>
+            <button type="button" className="icon-btn" data-tooltip="Restaurar" onClick={() => setIsMinimized(false)}>
+              <i className="bi bi-arrows-fullscreen" />
+            </button>
+            <button type="button" className="icon-btn danger" data-tooltip="Sair" onClick={handleLeave}>
+              <i className="bi bi-telephone-x-fill" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {participantMenu && (
+        <div
+          className="participant-context-menu glass-card"
+          style={{ left: participantMenu.x, top: participantMenu.y }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="context-title">
+            <strong>{participantMenu.participant.name}</strong>
+            <button type="button" className="icon-btn" onClick={() => setParticipantMenu(null)}>
+              <i className="bi bi-x" />
+            </button>
+          </div>
+          <button type="button" onClick={() => togglePinnedParticipant(participantMenu.participant.id)}>
+            <i className="bi bi-arrows-fullscreen" />
+            {pinnedParticipantId === participantMenu.participant.id ? "Restaurar grade" : "Maximizar tela"}
+          </button>
+          <label className={participantMenu.participant.isLocal ? "disabled" : ""}>
+            <span>
+              <i className="bi bi-volume-up-fill" /> Volume
+            </span>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={participantVolumes[participantMenu.participant.id] ?? 1}
+              disabled={participantMenu.participant.isLocal}
+              onChange={(event) => handleParticipantVolume(participantMenu.participant.id, event.target.value)}
+            />
+          </label>
+          {participantMenu.participant.isLocal && <small>Seu prÃ³prio Ã¡udio fica silenciado localmente para evitar eco.</small>}
+        </div>
+      )}
 
       {showInvite && (
         <InviteModal inviteUrl={inviteUrl} roomId={normalizedRoomId} onClose={() => setShowInvite(false)} />

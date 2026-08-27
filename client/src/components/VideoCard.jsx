@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { getInitials } from "../utils/format.js";
 
 export default function VideoCard({
+  id,
   stream,
   name,
   avatar = null,
@@ -11,6 +12,11 @@ export default function VideoCard({
   isSharingScreen = false,
   speaking = false,
   speakerId = null,
+  volume = 1,
+  isPinned = false,
+  compact = false,
+  onTogglePin,
+  onOpenMenu,
 }) {
   const videoRef = useRef(null);
 
@@ -50,6 +56,11 @@ export default function VideoCard({
     }
   }, [speakerId, isLocal]);
 
+  useEffect(() => {
+    if (!videoRef.current || isLocal) return;
+    videoRef.current.volume = Math.min(1, Math.max(0, volume));
+  }, [volume, isLocal]);
+
   const showVideo = camOn || isSharingScreen;
 
   return (
@@ -59,9 +70,16 @@ export default function VideoCard({
         speaking ? "is-speaking" : "",
         !showVideo ? "cam-off" : "",
         isLocal && !isSharingScreen ? "mirrored" : "",
+        isPinned ? "is-pinned" : "",
+        compact ? "is-compact" : "",
       ]
         .filter(Boolean)
         .join(" ")}
+      onDoubleClick={onTogglePin}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        onOpenMenu?.({ event, participant: { id, name, isLocal, micOn, camOn, isSharingScreen } });
+      }}
     >
       <video ref={videoRef} autoPlay playsInline muted={isLocal} />
 
@@ -80,6 +98,18 @@ export default function VideoCard({
           </span>
         )}
       </div>
+
+      <button
+        type="button"
+        className="video-pin-btn"
+        data-tooltip={isPinned ? "Restaurar grade" : "Maximizar"}
+        onClick={(event) => {
+          event.stopPropagation();
+          onTogglePin?.();
+        }}
+      >
+        <i className={`bi ${isPinned ? "bi-fullscreen-exit" : "bi-arrows-fullscreen"}`} />
+      </button>
 
       <div className="video-card-tag">
         <i className={`bi ${micOn ? "bi-mic-fill" : "bi-mic-mute-fill"} mic-icon ${!micOn ? "muted" : ""}`} />
