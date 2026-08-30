@@ -7,7 +7,23 @@ import { THEMES } from "./hooks/useTheme.js";
 import { warmUpServer } from "./services/api.js";
 
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+  window.addEventListener("load", async () => {
+    try {
+      const registration = await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
+      registration.addEventListener("updatefound", () => {
+        const worker = registration.installing;
+        if (!worker) return;
+
+        worker.addEventListener("statechange", () => {
+          if (worker.state === "activated" && navigator.serviceWorker.controller) {
+            window.location.reload();
+          }
+        });
+      });
+    } catch {
+      // ignora falha do service worker em desenvolvimento ou navegadores restritivos
+    }
+  });
 }
 
 warmUpServer();
