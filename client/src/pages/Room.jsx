@@ -187,6 +187,7 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
   const [showInvite, setShowInvite] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [speakerId, setSpeakerId] = useState(null);
+  const controlBarRef = useRef(null);
   const [pinnedParticipantId, setPinnedParticipantId] = useState(null);
   const [participantVolumes, setParticipantVolumes] = useState({});
   const [participantMenu, setParticipantMenu] = useState(null);
@@ -194,13 +195,73 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
   const [hideUnpinned, setHideUnpinned] = useState(false);
   const [hudVisible, setHudVisible] = useState(true);
   const [localSpeaking, setLocalSpeaking] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [toasts, setToasts] = useState([]);
   const [unreadChat, setUnreadChat] = useState(0);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [callDurationSeconds, setCallDurationSeconds] = useState(0);
+  const [reactionBursts, setReactionBursts] = useState([]);
+  const [callSettings, setCallSettings] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("nexa_call_settings") || "null");
+      return saved || { quality: "media", micVolume: 80, layout: "grid", themeMode: "dark", performanceMode: false };
+    } catch {
+      return { quality: "media", micVolume: 80, layout: "grid", themeMode: "dark", performanceMode: false };
+    }
+  });
   const toastIdRef = useRef(0);
+  const mediaRecorderRef = useRef(null);
+  const recordedChunksRef = useRef([]);
 
   useEffect(() => {
     setIsMinimized(minimized);
   }, [minimized]);
+
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = callSettings.themeMode;
+    document.documentElement.dataset.performance = callSettings.performanceMode ? "on" : "off";
+    localStorage.setItem("nexa_call_settings", JSON.stringify(callSettings));
+  }, [callSettings]);
+
+  useEffect(() => {
+    media.setVideoQuality?.(callSettings.quality);
+  }, [callSettings.quality, media]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setCallDurationSeconds(Math.floor((Date.now() - callStartRef.current) / 1000));
+    }, 1000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  const formatDuration = useCallback((seconds) => {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hrs > 0) return [hrs, mins, secs].map((value) => String(value).padStart(2, "0")).join(":");
+    return [mins, secs].map((value) => String(value).padStart(2, "0")).join(":");
+  }, []);
+
+  const handleQuickReaction = useCallback((emoji) => {
+    const id = Date.now() + Math.random();
+    setReactionBursts((prev) => [...prev, { id, emoji, x: 45 + Math.random() * 10, y: 18 + Math.random() * 12 }]);
+    pushToast(`${name} reagiu com ${emoji}`);
+    window.setTimeout(() => {
+      setReactionBursts((prev) => prev.filter((item) => item.id !== id));
+    }, 1800);
+  }, [name, pushToast]);
+
+  const updateCallSetting = useCallback((key, value) => {
+    setCallSettings((prev) => ({ ...prev, [key]: value }));
+  }, []);
 
   const setMinimizedState = useCallback(
     (value) => {
@@ -280,6 +341,33 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
   }, [participantMenu]);
 
   useEffect(() => {
+    const handleKeyDown = (event) => {
+      const targetTag = document.activeElement?.tagName;
+      const isTypingField = targetTag === "INPUT" || targetTag === "TEXTAREA" || targetTag === "SELECT";
+      if (isTypingField && !(event.ctrlKey || event.metaKey || event.altKey)) return;
+
+      const key = event.key.toLowerCase();
+      if (event.key === "Escape") {
+        if (showInvite) setShowInvite(false);
+        else if (showSettings) setShowSettings(false);
+        else if (activePanel) setActivePanel(null);
+        else if (participantMenu) setParticipantMenu(null);
+        return;
+      }
+
+      if (key === "m") { event.preventDefault(); handleToggleMic(); }
+      else if (key === "c") { event.preventDefault(); handleToggleCam(); }
+      else if (key === "f" && pinnedParticipantId) { event.preventDefault(); setHideUnpinned((value) => !value); }
+      else if (key === "i") { if (!showInvite) { event.preventDefault(); setShowInvite(true); } }
+      else if (key === "s") { if (!showSettings) { event.preventDefault(); setShowSettings(true); } }
+      else if (key === "t") { event.preventDefault(); togglePanel("chat"); }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [activePanel, handleToggleCam, handleToggleMic, pinnedParticipantId, showInvite, showSettings, togglePanel]);
+
+  useEffect(() => {
     if (!pinnedParticipantId || activePanel || participantMenu || showInvite || showSettings) {
       setHudVisible(true);
       return;
@@ -318,6 +406,7 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
     setShowInvite(false);
     setShowSettings(false);
     setMinimizedState(true);
+    pushToast("Chamada minimizada");
     sessionStorage.setItem("nexa_active_call", JSON.stringify({ roomId: normalizedRoomId, name, at: Date.now() }));
     navigate("/");
   }
@@ -349,13 +438,66 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
     if (audioTrack) {
       webrtc.replaceOutgoingTrack("audio", audioTrack);
     }
+    if (!audioTrack) {
+      pushToast("Não foi possível ativar o microfone.");
+      return;
+    }
     webrtc.broadcastMicState(nextMicOn);
+    pushToast(nextMicOn ? "Microfone ligado" : "Microfone desligado");
   }
 
   function handleToggleCam() {
     media.toggleCam();
     webrtc.broadcastCamState(!media.camOn);
+    pushToast(!media.camOn ? "Câmera ligada" : "Câmera desligada");
   }
+
+  const handleToggleRecording = useCallback(() => {
+    if (!window.MediaRecorder) {
+      pushToast("Gravação não é suportada por este navegador.");
+      return;
+    }
+
+    if (isRecording && mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      return;
+    }
+
+    if (!media.localStream) {
+      pushToast("A câmera e o microfone ainda não estão prontos.");
+      return;
+    }
+
+    const mimeType = [
+      "video/webm;codecs=vp9",
+      "video/webm;codecs=vp8",
+      "video/webm",
+    ].find((type) => MediaRecorder.isTypeSupported(type));
+
+    const recorder = new MediaRecorder(media.localStream, mimeType ? { mimeType } : undefined);
+    recordedChunksRef.current = [];
+
+    recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) recordedChunksRef.current.push(event.data);
+    };
+
+    recorder.onstop = () => {
+      const blob = new Blob(recordedChunksRef.current, { type: recorder.mimeType || "video/webm" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `nexa-gravacao-${new Date().toISOString().replace(/[:.]/g, "-")}.webm`;
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      pushToast("Gravação salva no seu dispositivo.");
+    };
+
+    recorder.start(250);
+    mediaRecorderRef.current = recorder;
+    setIsRecording(true);
+    pushToast("Gravação iniciada");
+  }, [isRecording, media.localStream, pushToast]);
 
   async function handleToggleScreenShare() {
     if (media.isSharingScreen) {
@@ -378,16 +520,25 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
       webrtc.setActiveVideoTrack(newTrack);
       webrtc.replaceOutgoingTrack("video", newTrack);
     }
+    if (!newTrack) pushToast("Não foi possível trocar a câmera.");
   }
 
   async function handleSwitchMicrophone(deviceId) {
     const newTrack = await media.switchMicrophone(deviceId);
     if (newTrack) {
       webrtc.replaceOutgoingTrack("audio", newTrack);
+      pushToast("Microfone alterado com sucesso.");
+    } else {
+      pushToast("Não foi possível trocar o microfone.");
     }
   }
 
   function handleLeave() {
+    setConfirmLeave(true);
+  }
+
+  function handleLeaveConfirmed() {
+    setConfirmLeave(false);
     const durationSeconds = Math.floor((Date.now() - callStartRef.current) / 1000);
     const participantNames = Array.from(webrtc.participants.values()).map((p) => p.name);
     if (user) {
@@ -397,11 +548,11 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
         durationSeconds,
       });
     }
-    // Guarda sala ativa para poder voltar
     sessionStorage.setItem("nexa_last_room", JSON.stringify({ roomId: normalizedRoomId, name, at: Date.now() }));
     socket.emit("leave-room");
     socket.disconnect();
     onEnded?.();
+    pushToast("Você saiu da sala.");
     navigate("/");
   }
 
@@ -490,6 +641,10 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
 
   return (
     <>
+      <a href="#call-controls" className="sr-only" onClick={(event) => { event.preventDefault(); controlBarRef.current?.focus(); }}>
+        Pular para os controles da chamada
+      </a>
+
       <div
         className={[
           "room",
@@ -498,6 +653,9 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
         ]
           .filter(Boolean)
           .join(" ")}
+        data-theme={callSettings.themeMode}
+        data-layout={callSettings.layout}
+        data-performance={callSettings.performanceMode ? "on" : "off"}
       >
       <div className="room-topbar">
         <div className="brand">
@@ -508,19 +666,23 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
         </div>
 
         <div className="room-meta">
-          <button type="button" className="topbar-icon-btn" data-tooltip="InÃ­cio" onClick={() => openAppPage("/")}>
+          <button type="button" className="topbar-icon-btn" data-tooltip="Início" aria-label="Voltar para a página inicial" onClick={() => openAppPage("/")}>
             <i className="bi bi-house-fill" />
           </button>
-          <button type="button" className="topbar-icon-btn" data-tooltip="Painel" onClick={() => openAppPage("/dashboard")}>
+          <button type="button" className="topbar-icon-btn" data-tooltip="Painel" aria-label="Abrir painel" onClick={() => openAppPage("/dashboard")}>
             <i className="bi bi-grid-fill" />
           </button>
-          <button type="button" className="topbar-icon-btn" data-tooltip="Servidores" onClick={() => openAppPage("/servers")}>
+          <button type="button" className="topbar-icon-btn" data-tooltip="Servidores" aria-label="Abrir servidores" onClick={() => openAppPage("/servers")}>
             <i className="bi bi-server" />
           </button>
           <ThemePicker />
           <div className="room-code-pill">
             <i className="bi bi-hash" />
             <span className="code-label">Sala</span> {normalizedRoomId}
+          </div>
+          <div className="room-code-pill timer-pill" aria-live="polite">
+            <i className="bi bi-clock-history" />
+            <span>{formatDuration(callDurationSeconds)}</span>
           </div>
           <div className={`connection-pill ${connectionState}`}>
             <span className="dot" />
@@ -531,10 +693,22 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
         </div>
       </div>
 
-      <div className="event-toasts">
+      <div className="event-toasts" role="status" aria-live="polite" aria-atomic="true">
         {toasts.map((t) => (
           <div key={t.id} className="event-toast glass-card">
             {t.text}
+          </div>
+        ))}
+      </div>
+
+      <div className="reaction-layer" aria-live="polite" aria-atomic="true">
+        {reactionBursts.map((reaction) => (
+          <div
+            key={reaction.id}
+            className="reaction-burst"
+            style={{ left: `${reaction.x}%`, top: `${reaction.y}%` }}
+          >
+            {reaction.emoji}
           </div>
         ))}
       </div>
@@ -620,12 +794,18 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
         activePanel={activePanel}
         participantCount={remoteParticipants.length + 1}
         unreadChatCount={unreadChat}
+        focusMode={hideUnpinned && Boolean(pinnedParticipantId)}
+        isRecording={isRecording}
+        controlBarRef={controlBarRef}
         onToggleMic={handleToggleMic}
         onToggleCam={handleToggleCam}
         onToggleScreenShare={handleToggleScreenShare}
         onTogglePanel={togglePanel}
         onOpenInvite={() => setShowInvite(true)}
         onOpenSettings={() => setShowSettings(true)}
+        onToggleFocusMode={() => pinnedParticipantId && setHideUnpinned((value) => !value)}
+        onToggleRecording={handleToggleRecording}
+        onQuickReaction={handleQuickReaction}
         onMinimize={minimizeCall}
         onLeave={handleLeave}
       />
@@ -636,7 +816,7 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
             <i className="bi bi-camera-video-fill" />
             <div>
               <strong>Sala {normalizedRoomId}</strong>
-              <span>{remoteParticipants.length + 1} na chamada</span>
+              <span>{remoteParticipants.length + 1} na chamada · {formatDuration(callDurationSeconds)}</span>
             </div>
           </div>
           <div className="mini-call-actions">
@@ -697,18 +877,53 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
       )}
 
       {showInvite && (
-        <InviteModal inviteUrl={inviteUrl} roomId={normalizedRoomId} onClose={() => setShowInvite(false)} />
+        <InviteModal
+          inviteUrl={inviteUrl}
+          roomId={normalizedRoomId}
+          onClose={() => setShowInvite(false)}
+          onCopySuccess={() => pushToast("Convite copiado!")}
+        />
       )}
 
       {showSettings && (
         <SettingsModal
           devices={media.devices}
           localStream={media.localStream}
+          settings={callSettings}
+          onSettingChange={updateCallSetting}
           onSwitchCamera={handleSwitchCamera}
           onSwitchMicrophone={handleSwitchMicrophone}
           onSpeakerChange={setSpeakerId}
           onClose={() => setShowSettings(false)}
         />
+      )}
+
+      {confirmLeave && (
+        <div className="modal-overlay" onClick={() => setConfirmLeave(false)}>
+          <div className="modal-card glass-card" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Sair da sala</h3>
+              <button type="button" className="icon-btn" onClick={() => setConfirmLeave(false)} aria-label="Fechar mensagem">
+                <i className="bi bi-x-lg" />
+              </button>
+            </div>
+            <div className="leave-summary">
+              <div>
+                <span>Participantes</span>
+                <strong>{remoteParticipants.length + 1}</strong>
+              </div>
+              <div>
+                <span>Duração</span>
+                <strong>{formatDuration(callDurationSeconds)}</strong>
+              </div>
+            </div>
+            <p>Tem certeza que deseja encerrar a chamada?</p>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button type="button" className="btn btn-ghost" onClick={() => setConfirmLeave(false)}>Cancelar</button>
+              <button type="button" className="btn btn-danger" onClick={handleLeaveConfirmed}>Sair</button>
+            </div>
+          </div>
+        </div>
       )}
       </div>
     </>

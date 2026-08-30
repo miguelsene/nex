@@ -55,3 +55,18 @@
   --controlbar-height: 84px;
   --sidebar-width: 340px;
 }
+
+:root[data-theme="light"] {
+  --bg-void: #f4f7ff;
+  --bg-base: #edf2ff;
+  --bg-elevated: #ffffff;
+  --bg-elevated-2: #e9eeff;
+  --border-subtle: rgba(39, 54, 92, 0.14);
+  --border-strong: rgba(39, 54, 92, 0.22);
+  --glass-bg: rgba(255, 255, 255, 0.76);
+  --glass-bg-strong: rgba(255, 255, 255, 0.9);
+  --glass-border: rgba(99, 113, 153, 0.18);
+  --text-primary: #1b2339;
+  --text-secondary: #495882;
+  --text-muted: #67759f;
+}

@@ -1,12 +1,13 @@
 import { useState } from "react";
 
-export default function InviteModal({ inviteUrl, roomId, onClose }) {
+export default function InviteModal({ inviteUrl, roomId, onClose, onCopySuccess }) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
     try {
       await navigator.clipboard.writeText(inviteUrl);
       setCopied(true);
+      onCopySuccess?.();
       setTimeout(() => setCopied(false), 2500);
     } catch {
       // Fallback: seleciona o texto para o usuário copiar manualmente

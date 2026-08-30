@@ -197,6 +197,47 @@ export function useMediaDevices() {
     }
   }, [micOn]);
 
+  const setVideoQuality = useCallback(async (quality) => {
+    const currentVideoTrack = cameraStreamRef.current?.getVideoTracks()[0];
+    if (!currentVideoTrack || !navigator.mediaDevices?.getUserMedia) return null;
+
+    try {
+      const presets = {
+        baixa: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 20 } },
+        media: { width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 24 } },
+        alta: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+      };
+
+      const constraints = {
+        video: {
+          ...(presets[quality] || presets.media),
+          deviceId: currentVideoTrack.getSettings?.().deviceId ? { exact: currentVideoTrack.getSettings().deviceId } : undefined,
+        },
+        audio: false,
+      };
+
+      const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+      const newTrack = newStream.getVideoTracks()[0];
+      if (!newTrack) return null;
+
+      if (cameraStreamRef.current) {
+        const oldTrack = cameraStreamRef.current.getVideoTracks()[0];
+        if (oldTrack) {
+          cameraStreamRef.current.removeTrack(oldTrack);
+          oldTrack.stop();
+        }
+        cameraStreamRef.current.addTrack(newTrack);
+      }
+
+      newTrack.enabled = camOn;
+      setLocalStream(new MediaStream(cameraStreamRef.current?.getTracks() || []));
+      return newTrack;
+    } catch {
+      setErrorMessage("Nao foi possivel ajustar a qualidade da camera.");
+      return null;
+    }
+  }, [camOn]);
+
   const startScreenShare = useCallback(async () => {
     try {
       if (!navigator.mediaDevices?.getDisplayMedia) {
@@ -261,6 +302,7 @@ export function useMediaDevices() {
     toggleCam,
     switchCamera,
     switchMicrophone,
+    setVideoQuality,
     startScreenShare,
     stopScreenShare,
   };

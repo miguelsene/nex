@@ -1,8 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 
 export default function SettingsModal({
-  devices,
+  devices = { cameras: [], microphones: [], speakers: [] },
   localStream,
+  settings = {
+    quality: "media",
+    micVolume: 70,
+    layout: "grid",
+    themeMode: "dark",
+    performanceMode: false,
+  },
+  onSettingChange,
   onSwitchCamera,
   onSwitchMicrophone,
   onSpeakerChange,
@@ -64,6 +72,21 @@ export default function SettingsModal({
         </div>
 
         <div className="settings-section">
+          <label htmlFor="quality-select">Qualidade da câmera</label>
+          <select id="quality-select" value={settings.quality} onChange={(e) => onSettingChange("quality", e.target.value)}>
+            <option value="baixa">Baixa</option>
+            <option value="media">Média</option>
+            <option value="alta">Alta</option>
+          </select>
+        </div>
+
+        <div className="settings-section">
+          <label htmlFor="volume-range">Volume do microfone</label>
+          <input id="volume-range" type="range" min="0" max="100" value={settings.micVolume} onChange={(e) => onSettingChange("micVolume", Number(e.target.value))} />
+          <small>{settings.micVolume}%</small>
+        </div>
+
+        <div className="settings-section">
           <label htmlFor="camera-select">Câmera</label>
           <select id="camera-select" onChange={(e) => onSwitchCamera(e.target.value)} defaultValue="">
             <option value="" disabled>
@@ -92,6 +115,31 @@ export default function SettingsModal({
           <div className="mic-meter">
             <div className="mic-meter-fill" style={{ width: `${micLevel}%` }} />
           </div>
+        </div>
+
+        <div className="settings-section">
+          <label htmlFor="layout-select">Layout da chamada</label>
+          <select id="layout-select" value={settings.layout} onChange={(e) => onSettingChange("layout", e.target.value)}>
+            <option value="grid">Grade</option>
+            <option value="single">1x1</option>
+            <option value="focus">Foco principal</option>
+          </select>
+        </div>
+
+        <div className="settings-section">
+          <label htmlFor="theme-select">Tema</label>
+          <select id="theme-select" value={settings.themeMode} onChange={(e) => onSettingChange("themeMode", e.target.value)}>
+            <option value="dark">Escuro</option>
+            <option value="light">Claro</option>
+          </select>
+        </div>
+
+        <div className="settings-section">
+          <label htmlFor="performance-select">Modo de performance</label>
+          <select id="performance-select" value={settings.performanceMode ? "economia" : "padrao"} onChange={(e) => onSettingChange("performanceMode", e.target.value === "economia")}>
+            <option value="padrao">Padrão</option>
+            <option value="economia">Economia de energia</option>
+          </select>
         </div>
 
         {devices.speakers.length > 0 && (
