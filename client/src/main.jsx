@@ -6,9 +6,13 @@ import "./styles/index.css";
 import { THEMES } from "./hooks/useTheme.js";
 import { warmUpServer } from "./services/api.js";
 
-if ("serviceWorker" in navigator) {
+const isLocalDevHost = ["localhost", "127.0.0.1", "0.0.0.0"].includes(window.location.hostname);
+
+if ("serviceWorker" in navigator && !isLocalDevHost) {
   window.addEventListener("load", async () => {
     try {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
       const registration = await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
       registration.addEventListener("updatefound", () => {
         const worker = registration.installing;
@@ -21,7 +25,7 @@ if ("serviceWorker" in navigator) {
         });
       });
     } catch {
-      // ignora falha do service worker em desenvolvimento ou navegadores restritivos
+      // Ignora falha do service worker em navegadores restritivos.
     }
   });
 }
