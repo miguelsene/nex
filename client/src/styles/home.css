@@ -3,7 +3,7 @@
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 /* --- Fundo com blobs de gradiente animados (elemento assinatura) --- */
@@ -81,6 +81,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 28px clamp(20px, 5vw, 64px);
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .brand {
@@ -379,20 +381,42 @@
 }
 
 @media (max-width: 560px) {
+  .home-header {
+    justify-content: center;
+    text-align: center;
+  }
+
   .home-header nav {
     display: flex;
     flex-wrap: wrap;
+    justify-content: center;
     gap: 8px;
     font-size: 0.8rem;
   }
+
   .home-header nav a:not(.btn):not(.btn-ghost-sm) {
     display: none;
   }
+
   .features {
     grid-template-columns: 1fr;
   }
+
   .hero-form .input-row {
     flex-direction: column;
+  }
+
+  .join-code-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .join-code-form {
+    width: 100%;
+  }
+
+  .join-code-form input {
+    width: 100%;
   }
 }
 

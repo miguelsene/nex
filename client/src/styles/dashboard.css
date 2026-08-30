@@ -4,7 +4,7 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 .dash-header {
@@ -327,10 +327,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .dash-search-form .name-input-wrap {
   padding: 0 12px;
+  min-width: 0;
 }
 
 .dash-search-form .name-input-wrap input {
@@ -345,13 +347,16 @@
   .dash-header {
     padding: 10px 14px;
     align-items: center;
+    justify-content: center;
   }
 
   .dash-header > div:last-child {
     width: 100%;
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
     gap: 6px;
+    flex-wrap: wrap;
   }
 
   .dash-body {
@@ -393,5 +398,13 @@
 
   .dash-dm-messages {
     padding: 12px;
+  }
+
+  .dash-search-form {
+    width: 100%;
+  }
+
+  .dash-search-form .name-input-wrap {
+    flex: 1 1 100%;
   }
 }
