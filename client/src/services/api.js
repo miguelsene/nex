@@ -1,7 +1,16 @@
 import { SERVER_HTTP_URL } from "./socket.js";
 
 async function request(path, options) {
-  const res = await fetch(`${SERVER_HTTP_URL}${path}`, options);
+  // Use rota relativa quando o backend estiver no mesmo host/origem
+  let base = (SERVER_HTTP_URL || "").replace(/\/$/, "");
+  try {
+    const url = new URL(base || window.location.href);
+    if (url.host === window.location.host) base = "";
+  } catch {
+    base = base || "";
+  }
+
+  const res = await fetch(`${base}${path}`, options);
   if (!res.ok) {
     throw new Error(`Falha na requisição: ${path}`);
   }
