@@ -277,6 +277,17 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
       .catch(() => setIceServers(null));
   }, []);
 
+  const webrtc = useWebRTC({
+    socket,
+    roomId: normalizedRoomId,
+    name,
+    avatar: user?.avatar || null,
+    userId: user?.id || null,
+    localStream: media.localStream,
+    iceServers,
+    onEvent: handleCallEvent,
+  });
+
   const pushToast = useCallback((text) => {
     const id = ++toastIdRef.current;
     setToasts((prev) => [...prev, { id, text }]);
@@ -292,17 +303,6 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
     },
     [pushToast]
   );
-
-  const webrtc = useWebRTC({
-    socket,
-    roomId: normalizedRoomId,
-    name,
-    avatar: user?.avatar || null,
-    userId: user?.id || null,
-    localStream: media.localStream,
-    iceServers,
-    onEvent: handleCallEvent,
-  });
 
   // Define a track de vídeo ativa assim que a câmera estiver pronta
   useEffect(() => {
