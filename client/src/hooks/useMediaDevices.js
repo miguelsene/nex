@@ -94,6 +94,13 @@ export function useMediaDevices() {
         }
 
         const stream = new MediaStream([audioTrack, ...(videoTrack ? [videoTrack] : [])]);
+        // Por padrão, inicia com a câmera desativada (apenas áudio ativo)
+        const initialVideoTrack = stream.getVideoTracks()[0];
+        if (initialVideoTrack) {
+          try {
+            initialVideoTrack.enabled = false;
+          } catch {}
+        }
         if (cancelled) {
           stream.getTracks().forEach((track) => track.stop());
           return;
@@ -248,23 +255,16 @@ export function useMediaDevices() {
         video: { frameRate: { ideal: 30 }, width: { ideal: 1920 }, height: { ideal: 1080 } },
         audio: false,
       });
+      // Mantemos a tela como um stream separado (não substitui a câmera local)
       screenStreamRef.current = screenStream;
-
-      const screenTrack = screenStream.getVideoTracks()[0];
-      const oldVideoTrack = cameraStreamRef.current?.getVideoTracks()[0];
-      if (oldVideoTrack) {
-        savedCameraTrackRef.current = oldVideoTrack;
-        cameraStreamRef.current.removeTrack(oldVideoTrack);
-      }
-      cameraStreamRef.current.addTrack(screenTrack);
-      setLocalStream(new MediaStream(cameraStreamRef.current.getTracks()));
       setIsSharingScreen(true);
 
+      const screenTrack = screenStream.getVideoTracks()[0];
       screenTrack.addEventListener("ended", () => {
         stopScreenShare();
       });
 
-      return screenTrack;
+      return screenStream;
     } catch {
       return null;
     }
@@ -273,21 +273,11 @@ export function useMediaDevices() {
 
   const stopScreenShare = useCallback(() => {
     screenStreamRef.current?.getTracks().forEach((track) => track.stop());
-
-    if (cameraStreamRef.current) {
-      cameraStreamRef.current.getVideoTracks().forEach((track) => cameraStreamRef.current.removeTrack(track));
-      if (savedCameraTrackRef.current) {
-        cameraStreamRef.current.addTrack(savedCameraTrackRef.current);
-        savedCameraTrackRef.current = null;
-      }
-    }
-
     screenStreamRef.current = null;
     setIsSharingScreen(false);
-
-    const originalCameraTrack = cameraStreamRef.current?.getVideoTracks()[0] || null;
+    // localStream permanece com a câmera original
     setLocalStream(new MediaStream(cameraStreamRef.current?.getTracks() || []));
-    return originalCameraTrack;
+    return null;
   }, []);
 
   return {

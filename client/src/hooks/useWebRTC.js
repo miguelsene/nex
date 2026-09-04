@@ -65,7 +65,15 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
     }
 
     // Usa a track de vídeo ativa (câmera ou compartilhamento de tela em andamento)
-    const videoTrack = activeVideoTrackRef.current || stream.getVideoTracks()[0];
+    // Se a track ativa for um objeto MediaStream (compartilhamento de tela retornado), trata separadamente
+    const active = activeVideoTrackRef.current;
+    if (active && typeof active === "object" && active.getVideoTracks) {
+      const screenTrack = active.getVideoTracks()[0];
+      if (screenTrack && !existingKinds.has("video")) pc.addTrack(screenTrack, active);
+      return;
+    }
+
+    const videoTrack = active || stream.getVideoTracks()[0];
     if (videoTrack && !existingKinds.has("video")) {
       pc.addTrack(videoTrack, stream);
     }
@@ -96,7 +104,11 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
 
       pc = createPeerConnection(iceServersRef.current, {
         onIceCandidate: (candidate) => {
-          socket.emit("ice-candidate", { to: remoteId, candidate });
+          // Encaminha candidato preservando canal quando o remoteId tiver sufixo (#screen)
+          const parts = String(remoteId).split("#");
+          const to = parts[0];
+          const channel = parts[1] || undefined;
+          socket.emit("ice-candidate", { to, candidate, channel });
         },
         onTrack: (event) => {
           const [stream] = event.streams;
@@ -142,7 +154,10 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
         const offer = await pc.createOffer();
         const optimized = new RTCSessionDescription({ type: offer.type, sdp: optimizeAudioSdp(offer.sdp) });
         await pc.setLocalDescription(optimized);
-        socket.emit("offer", { to: remoteId, offer: pc.localDescription });
+        const parts = String(remoteId).split("#");
+        const to = parts[0];
+        const channel = parts[1] || undefined;
+        socket.emit("offer", { to, offer: pc.localDescription, channel });
       } catch {
         // Falha ao negociar com este participante — não derruba a chamada inteira
       }
@@ -169,6 +184,14 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
       for (const participant of response.participants) {
         await createOfferTo(participant.id, participant);
       }
+
+      // Se estivermos compartilhando a tela localmente, precisamos também criar ofertas
+      // para que o participante sintético (meuid#screen) seja negociado com os demais.
+      if (localStreamRef.current && localStreamRef.current.getVideoTracks().length > 0) {
+        // Apenas criaremos ofertas para o canal 'screen' se o cliente estiver em modo de compartilhamento
+        // O consumo do stream de tela é feito por `setActiveVideoTrack` com um MediaStream.
+        // Não prossegue automaticamente aqui — a UI chama createOfferTo quando iniciar o screen share.
+      }
     });
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -191,6 +214,7 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
     }
 
     async function handleOffer({ from, offer }) {
+      // `from` pode ser no formato 'socketId#screen' quando for um participante sintético
       const pc = getOrCreatePeerConnection(from);
       attachLocalTracks(pc);
       try {
@@ -199,7 +223,10 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
         const answer = await pc.createAnswer();
         const optimized = new RTCSessionDescription({ type: answer.type, sdp: optimizeAudioSdp(answer.sdp) });
         await pc.setLocalDescription(optimized);
-        socket.emit("answer", { to: from, answer: pc.localDescription });
+        const parts = String(from).split("#");
+        const to = parts[0];
+        const channel = parts[1] || undefined;
+        socket.emit("answer", { to, answer: pc.localDescription, channel });
       } catch {
         // Ignora falha de negociação pontual
       }

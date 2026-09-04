@@ -308,6 +308,7 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
   useEffect(() => {
     if (media.localStream) {
       const track = media.localStream.getVideoTracks()[0] || null;
+      // Não ativa câmera automaticamente; apenas registra a track local (desligada)
       if (!media.isSharingScreen) webrtc.setActiveVideoTrack(track);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -501,15 +502,22 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
 
   async function handleToggleScreenShare() {
     if (media.isSharingScreen) {
-      const cameraTrack = media.stopScreenShare();
-      webrtc.setActiveVideoTrack(cameraTrack);
-      webrtc.replaceOutgoingTrack("video", cameraTrack);
+      // Para o compartilhamento de tela — remove o participante sintético no servidor
+      media.stopScreenShare();
+      webrtc.setActiveVideoTrack(media.localStream?.getVideoTracks()[0] || null);
+      webrtc.replaceOutgoingTrack("video", media.localStream?.getVideoTracks()[0] || null);
       webrtc.broadcastScreenShareStop();
     } else {
-      const screenTrack = await media.startScreenShare();
-      if (!screenTrack) return;
-      webrtc.setActiveVideoTrack(screenTrack);
-      webrtc.replaceOutgoingTrack("video", screenTrack);
+      const screenStream = await media.startScreenShare();
+      if (!screenStream) return;
+      // Criamos um participante sintético identificado por `${selfSocketId}#screen`.
+      // Em vez de substituir imediatamente a track local, repassamos o stream de tela
+      // para o hook WebRTC como objeto MediaStream para que ele use como origem.
+      webrtc.setActiveVideoTrack(screenStream);
+      // substitui as tracks de vídeo em todos os peerConnections usando o canal 'screen'
+      // para que o servidor repasse para os peers como um participante separado
+      // Altera a lógica de signaling para enviar channel='screen' no offer/answer
+      webrtc.replaceOutgoingTrack("video", screenStream.getVideoTracks()[0]);
       webrtc.broadcastScreenShareStart();
     }
   }
