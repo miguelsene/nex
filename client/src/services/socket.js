@@ -1,10 +1,21 @@
 import { io } from "socket.io-client";
 
 const getDefaultServerUrl = () => {
-  const host = window.location.hostname || "localhost";
-  const normalizedHost = host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
-  const protocol = window.location.protocol === "https:" ? "https" : "http";
-  return `${protocol}://${normalizedHost}:4000`;
+  // In development we talk to the local signaling server on :4000.
+  // In production (hosted), default to the same origin that served the page
+  // so Socket.IO connects to the server that serves the app.
+  try {
+    if (import.meta.env.DEV) {
+      const host = window.location.hostname || "localhost";
+      const normalizedHost = host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+      const protocol = window.location.protocol === "https:" ? "https" : "http";
+      return `${protocol}://${normalizedHost}:4000`;
+    }
+  } catch {
+    // fallthrough to same-origin
+  }
+
+  return `${window.location.protocol}//${window.location.host}`;
 };
 
 const isStaleServerOverride = (value) => {
