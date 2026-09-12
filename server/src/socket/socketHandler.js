@@ -47,32 +47,21 @@ export function registerSocketHandlers(io, socket) {
     }
   });
 
-  // --- Sinalização WebRTC (repasse direto entre pares, ponto a ponto) ---
-  socket.on("offer", ({ to, offer, channel }) => {
+  socket.on("offer", ({ to, offer }) => {
     if (!to || !offer) return;
-    const fromId = channel ? `${socket.id}#${channel}` : socket.id;
-    // Inclui metadados do remetente para o destinatário identificar quem é
     const senderMeta = roomManager.listParticipants(currentRoomId || "").find((p) => p.id === socket.id);
-    io.to(to).emit("offer", { from: fromId, offer, meta: senderMeta || null });
+    io.to(to).emit("offer", { from: socket.id, offer, meta: senderMeta || null });
   });
 
-  socket.on("answer", ({ to, answer, channel }) => {
+  socket.on("answer", ({ to, answer }) => {
     if (!to || !answer) return;
-    const fromId = channel ? `${socket.id}#${channel}` : socket.id;
     const senderMeta = roomManager.listParticipants(currentRoomId || "").find((p) => p.id === socket.id);
-    // Extract real socket id from "to" in case it has a channel suffix (e.g. "abc123#screen")
-    const realTo = to.split("#")[0];
-    const toChannel = to.split("#")[1];
-    const answerFromId = toChannel ? `${socket.id}#${toChannel}` : fromId;
-    io.to(realTo).emit("answer", { from: answerFromId, answer, meta: senderMeta || null });
+    io.to(to).emit("answer", { from: socket.id, answer, meta: senderMeta || null });
   });
 
-  socket.on("ice-candidate", ({ to, candidate, channel }) => {
+  socket.on("ice-candidate", ({ to, candidate }) => {
     if (!to || !candidate) return;
-    const realTo = to.split("#")[0];
-    const toChannel = to.split("#")[1];
-    const fromId = (toChannel || channel) ? `${socket.id}#${toChannel || channel}` : socket.id;
-    io.to(realTo).emit("ice-candidate", { from: fromId, candidate });
+    io.to(to).emit("ice-candidate", { from: socket.id, candidate });
   });
 
   // --- Estado do participante ---
@@ -90,28 +79,13 @@ export function registerSocketHandlers(io, socket) {
 
   socket.on("screen-share-started", () => {
     if (!currentRoomId) return;
-    // Marca como compartilhando e adiciona um participante sintético que representa a tela
     roomManager.updateParticipant(currentRoomId, socket.id, { isSharingScreen: true });
-
-    const existing = roomManager.listParticipants(currentRoomId).find((p) => p.id === socket.id);
-    const syntheticId = `${socket.id}#screen`;
-    // Evita duplicar caso já exista
-    if (!roomManager.listParticipants(currentRoomId).some((p) => p.id === syntheticId)) {
-      const participantMeta = existing || { name: "Convidado", avatar: null, userId: null };
-      const result = roomManager.addParticipant(currentRoomId, syntheticId, `${participantMeta.name} (Tela)`, participantMeta.avatar, participantMeta.userId);
-      if (result) {
-        socket.to(currentRoomId).emit("user-joined", { participant: result.participant });
-      }
-    }
     socket.to(currentRoomId).emit("screen-share-started", { id: socket.id });
   });
 
   socket.on("screen-share-stopped", () => {
     if (!currentRoomId) return;
     roomManager.updateParticipant(currentRoomId, socket.id, { isSharingScreen: false });
-    const syntheticId = `${socket.id}#screen`;
-    roomManager.removeParticipant(currentRoomId, syntheticId);
-    socket.to(currentRoomId).emit("user-left", { id: syntheticId });
     socket.to(currentRoomId).emit("screen-share-stopped", { id: socket.id });
   });
 

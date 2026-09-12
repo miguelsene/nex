@@ -354,7 +354,7 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
   useEffect(() => {
     fetchIceConfig()
       .then((cfg) => setIceServers(cfg.iceServers))
-      .catch(() => setIceServers(null));
+      .catch(() => setIceServers([{ urls: "stun:stun.l.google.com:19302" }]));
   }, []);
 
   const webrtc = useWebRTC({
@@ -388,10 +388,9 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
 
   // Define a track de vídeo ativa assim que a câmera estiver pronta
   useEffect(() => {
-    if (media.localStream) {
+    if (media.localStream && !media.isSharingScreen) {
       const track = media.localStream.getVideoTracks()[0] || null;
-      // Não ativa câmera automaticamente; apenas registra a track local (desligada)
-      if (!media.isSharingScreen) webrtc.setActiveVideoTrack(track);
+      webrtc.replaceOutgoingTrack("video", track);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [media.localStream]);
@@ -589,24 +588,28 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
 
   async function handleToggleScreenShare() {
     if (media.isSharingScreen) {
+      const camTrack = media.localStream?.getVideoTracks()[0] || null;
       media.stopScreenShare();
-      webrtc.setActiveVideoTrack(media.localStream?.getVideoTracks()[0] || null);
-      webrtc.replaceOutgoingTrack("video", media.localStream?.getVideoTracks()[0] || null);
-      webrtc.stopScreenShareConnections();
+      webrtc.replaceOutgoingTrack("video", camTrack);
       webrtc.broadcastScreenShareStop();
     } else {
       const screenStream = await media.startScreenShare();
       if (!screenStream) return;
-      webrtc.setActiveVideoTrack(screenStream);
+      const screenTrack = screenStream.getVideoTracks()[0];
+      webrtc.replaceOutgoingTrack("video", screenTrack);
       webrtc.broadcastScreenShareStart();
-      await webrtc.startScreenShareOffers(screenStream);
+      // Para o compartilhamento quando o usuário clica em "Parar" no navegador
+      screenTrack.addEventListener("ended", () => {
+        const camTrack2 = media.localStream?.getVideoTracks()[0] || null;
+        webrtc.replaceOutgoingTrack("video", camTrack2);
+        webrtc.broadcastScreenShareStop();
+      }, { once: true });
     }
   }
 
   async function handleSwitchCamera(deviceId) {
     const newTrack = await media.switchCamera(deviceId);
     if (newTrack && !media.isSharingScreen) {
-      webrtc.setActiveVideoTrack(newTrack);
       webrtc.replaceOutgoingTrack("video", newTrack);
     }
     if (!newTrack) pushToast("Não foi possível trocar a câmera.");
