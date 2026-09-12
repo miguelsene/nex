@@ -251,15 +251,6 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
     return [mins, secs].map((value) => String(value).padStart(2, "0")).join(":");
   }, []);
 
-  const handleQuickReaction = useCallback((emoji) => {
-    const id = Date.now() + Math.random();
-    setReactionBursts((prev) => [...prev, { id, emoji, x: 45 + Math.random() * 10, y: 18 + Math.random() * 12 }]);
-    pushToast(`${name} reagiu com ${emoji}`);
-    window.setTimeout(() => {
-      setReactionBursts((prev) => prev.filter((item) => item.id !== id));
-    }, 1800);
-  }, [name, pushToast]);
-
   const updateCallSetting = useCallback((key, value) => {
     setCallSettings((prev) => ({ ...prev, [key]: value }));
   }, []);
@@ -271,23 +262,6 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
     },
     [onMinimizedChange]
   );
-
-  useEffect(() => {
-    fetchIceConfig()
-      .then((cfg) => setIceServers(cfg.iceServers))
-      .catch(() => setIceServers(null));
-  }, []);
-
-  const webrtc = useWebRTC({
-    socket,
-    roomId: normalizedRoomId,
-    name,
-    avatar: user?.avatar || null,
-    userId: user?.id || null,
-    localStream: media.localStream,
-    iceServers,
-    onEvent: handleCallEvent,
-  });
 
   const pushToast = useCallback((text) => {
     const id = ++toastIdRef.current;
@@ -330,6 +304,32 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
     },
     [pushToast, playSound]
   );
+
+  const handleQuickReaction = useCallback((emoji) => {
+    const id = Date.now() + Math.random();
+    setReactionBursts((prev) => [...prev, { id, emoji, x: 45 + Math.random() * 10, y: 18 + Math.random() * 12 }]);
+    pushToast(`${name} reagiu com ${emoji}`);
+    window.setTimeout(() => {
+      setReactionBursts((prev) => prev.filter((item) => item.id !== id));
+    }, 1800);
+  }, [name, pushToast]);
+
+  useEffect(() => {
+    fetchIceConfig()
+      .then((cfg) => setIceServers(cfg.iceServers))
+      .catch(() => setIceServers(null));
+  }, []);
+
+  const webrtc = useWebRTC({
+    socket,
+    roomId: normalizedRoomId,
+    name,
+    avatar: user?.avatar || null,
+    userId: user?.id || null,
+    localStream: media.localStream,
+    iceServers,
+    onEvent: handleCallEvent,
+  });
 
   // Define a track de vídeo ativa assim que a câmera estiver pronta
   useEffect(() => {
