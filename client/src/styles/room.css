@@ -684,6 +684,7 @@ a:focus-visible {
   transform: translate(-50%, -50%);
   animation: reaction-pop 1.8s ease-out forwards;
   font-size: clamp(1.4rem, 2vw, 2.2rem);
+  color: var(--accent-cyan);
   filter: drop-shadow(0 8px 24px rgba(124, 92, 252, 0.6));
 }
 

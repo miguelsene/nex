@@ -24,6 +24,7 @@ export function useMediaDevices() {
   const cameraStreamRef = useRef(null);
   const screenStreamRef = useRef(null);
   const savedCameraTrackRef = useRef(null);
+  const [screenStream, setScreenStream] = useState(null);
 
   const refreshDeviceList = useCallback(async () => {
     try {
@@ -40,9 +41,11 @@ export function useMediaDevices() {
 
   const setCurrentStream = useCallback((stream) => {
     cameraStreamRef.current = stream;
-    setLocalStream(new MediaStream(stream.getTracks()));
-    setMicOn(Boolean(stream.getAudioTracks().find((track) => track.readyState === "live" && track.enabled)));
-    setCamOn(Boolean(stream.getVideoTracks().find((track) => track.readyState === "live" && track.enabled)));
+    // Usa o mesmo objeto MediaStream — não cria cópia — para que
+    // os peers recebam as tracks atualizadas quando enabled muda
+    setLocalStream(stream);
+    setMicOn(Boolean(stream.getAudioTracks().find((t) => t.readyState === "live" && t.enabled)));
+    setCamOn(Boolean(stream.getVideoTracks().find((t) => t.readyState === "live" && t.enabled)));
   }, []);
 
   const acquireAudioTrack = useCallback(async () => {
@@ -94,13 +97,10 @@ export function useMediaDevices() {
         }
 
         const stream = new MediaStream([audioTrack, ...(videoTrack ? [videoTrack] : [])]);
-        // Por padrão, inicia com a câmera desativada (apenas áudio ativo)
-        const initialVideoTrack = stream.getVideoTracks()[0];
-        if (initialVideoTrack) {
-          try {
-            initialVideoTrack.enabled = false;
-          } catch {}
-        }
+        // Inicia com mic e câmera desligados — usuário escolhe na tela de pré-entrada
+        audioTrack.enabled = false;
+        if (videoTrack) videoTrack.enabled = false;
+
         if (cancelled) {
           stream.getTracks().forEach((track) => track.stop());
           return;
@@ -156,8 +156,9 @@ export function useMediaDevices() {
     if (!stream) return;
     const videoTrack = stream.getVideoTracks()[0];
     if (!videoTrack) return;
-    videoTrack.enabled = !videoTrack.enabled;
-    setCamOn(videoTrack.enabled);
+    const next = !videoTrack.enabled;
+    videoTrack.enabled = next;
+    setCamOn(next);
   }, []);
 
   const switchCamera = useCallback(async (deviceId) => {
@@ -167,14 +168,12 @@ export function useMediaDevices() {
         audio: false,
       });
       const newTrack = newStream.getVideoTracks()[0];
-      const oldTrack = cameraStreamRef.current?.getVideoTracks()[0];
-      if (oldTrack) {
-        cameraStreamRef.current.removeTrack(oldTrack);
-        oldTrack.stop();
-      }
-      cameraStreamRef.current.addTrack(newTrack);
+      const stream = cameraStreamRef.current;
+      const oldTrack = stream?.getVideoTracks()[0];
+      if (oldTrack) { stream.removeTrack(oldTrack); oldTrack.stop(); }
+      stream.addTrack(newTrack);
       newTrack.enabled = camOn;
-      setLocalStream(new MediaStream(cameraStreamRef.current.getTracks()));
+      setLocalStream(stream);
       return newTrack;
     } catch {
       setErrorMessage("Nao foi possivel trocar de camera.");
@@ -189,14 +188,12 @@ export function useMediaDevices() {
         audio: { deviceId: { exact: deviceId } },
       });
       const newTrack = newStream.getAudioTracks()[0];
-      const oldTrack = cameraStreamRef.current?.getAudioTracks()[0];
-      if (oldTrack) {
-        cameraStreamRef.current.removeTrack(oldTrack);
-        oldTrack.stop();
-      }
-      cameraStreamRef.current.addTrack(newTrack);
+      const stream = cameraStreamRef.current;
+      const oldTrack = stream?.getAudioTracks()[0];
+      if (oldTrack) { stream.removeTrack(oldTrack); oldTrack.stop(); }
+      stream.addTrack(newTrack);
       newTrack.enabled = micOn;
-      setLocalStream(new MediaStream(cameraStreamRef.current.getTracks()));
+      setLocalStream(stream);
       return newTrack;
     } catch {
       setErrorMessage("Nao foi possivel trocar de microfone.");
@@ -251,20 +248,20 @@ export function useMediaDevices() {
         setErrorMessage("Compartilhamento de tela nao e suportado neste navegador.");
         return null;
       }
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({
+      const captureStream = await navigator.mediaDevices.getDisplayMedia({
         video: { frameRate: { ideal: 30 }, width: { ideal: 1920 }, height: { ideal: 1080 } },
         audio: false,
       });
-      // Mantemos a tela como um stream separado (não substitui a câmera local)
-      screenStreamRef.current = screenStream;
+      screenStreamRef.current = captureStream;
+      setScreenStream(captureStream);
       setIsSharingScreen(true);
 
-      const screenTrack = screenStream.getVideoTracks()[0];
+      const screenTrack = captureStream.getVideoTracks()[0];
       screenTrack.addEventListener("ended", () => {
         stopScreenShare();
       });
 
-      return screenStream;
+      return captureStream;
     } catch {
       return null;
     }
@@ -274,14 +271,15 @@ export function useMediaDevices() {
   const stopScreenShare = useCallback(() => {
     screenStreamRef.current?.getTracks().forEach((track) => track.stop());
     screenStreamRef.current = null;
+    setScreenStream(null);
     setIsSharingScreen(false);
-    // localStream permanece com a câmera original
-    setLocalStream(new MediaStream(cameraStreamRef.current?.getTracks() || []));
+    setLocalStream(cameraStreamRef.current || null);
     return null;
   }, []);
 
   return {
     localStream,
+    screenStream,
     micOn,
     camOn,
     isSharingScreen,

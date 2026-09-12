@@ -36,6 +36,7 @@ export default function App() {
         <CallExperience
           roomId={activeCall.roomId}
           name={activeCall.name}
+          mediaPrefs={activeCall.mediaPrefs}
           minimized={activeCall.minimized}
           onMinimizedChange={(minimized) => setActiveCall((call) => call ? { ...call, minimized } : call)}
           onEnded={() => setActiveCall(null)}

@@ -28,9 +28,15 @@ export default function Room({ activeCall, onStartCall }) {
   const navigate = useNavigate();
 
   const [confirmedName, setConfirmedName] = useState(location.state?.name || null);
+  const [mediaPrefs, setMediaPrefs] = useState(location.state?.mediaPrefs || null);
+
+  function handleJoined(name, prefs) {
+    setMediaPrefs(prefs || { withMic: false, withCam: false });
+    setConfirmedName(name);
+  }
 
   if (!confirmedName) {
-    return <JoinScreen roomId={roomId} onJoined={setConfirmedName} />;
+    return <JoinScreen roomId={roomId} onJoined={handleJoined} />;
   }
 
   if (onStartCall) {
@@ -39,21 +45,22 @@ export default function Room({ activeCall, onStartCall }) {
         activeCall={activeCall}
         roomId={roomId}
         name={confirmedName}
+        mediaPrefs={mediaPrefs}
         onStartCall={onStartCall}
       />
     );
   }
 
-  return <CallExperience roomId={roomId} name={confirmedName} />;
+  return <CallExperience roomId={roomId} name={confirmedName} mediaPrefs={mediaPrefs} />;
 }
 
-function StartPersistentCall({ activeCall, roomId, name, onStartCall }) {
+function StartPersistentCall({ activeCall, roomId, name, mediaPrefs, onStartCall }) {
   const normalizedRoomId = roomId.toUpperCase();
 
   useEffect(() => {
     if (activeCall?.roomId === normalizedRoomId) return;
-    onStartCall({ roomId: normalizedRoomId, name, minimized: false });
-  }, [activeCall?.roomId, name, normalizedRoomId, onStartCall]);
+    onStartCall({ roomId: normalizedRoomId, name, mediaPrefs, minimized: false });
+  }, [activeCall?.roomId, name, normalizedRoomId, onStartCall, mediaPrefs]);
 
   if (activeCall?.roomId === normalizedRoomId) return null;
 
@@ -75,6 +82,7 @@ function JoinScreen({ roomId, onJoined }) {
   const [error, setError] = useState(null);
   const [checking, setChecking] = useState(true);
   const [roomFound, setRoomFound] = useState(true);
+  const [confirmedEntry, setConfirmedEntry] = useState(null);
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -100,7 +108,11 @@ function JoinScreen({ roomId, onJoined }) {
     const nameToUse = user ? user.name : name;
     const validationError = validateName(nameToUse);
     if (validationError) { setError(validationError); return; }
-    onJoined(nameToUse.trim());
+    setConfirmedEntry({ name: nameToUse.trim() });
+  }
+
+  if (confirmedEntry) {
+    return <PreCallScreen name={confirmedEntry.name} onJoined={onJoined} />;
   }
 
   return (
@@ -171,10 +183,65 @@ function JoinScreen({ roomId, onJoined }) {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Tela de pré-entrada: escolha de mic/câmera antes de entrar            */
+/* ---------------------------------------------------------------------- */
+
+function PreCallScreen({ name, onJoined }) {
+  const [withMic, setWithMic] = useState(false);
+  const [withCam, setWithCam] = useState(false);
+
+  return (
+    <div className="home">
+      <div className="aurora-bg" aria-hidden="true">
+        <div className="aurora-blob b1" />
+        <div className="aurora-blob b2" />
+      </div>
+      <div className="join-screen">
+        <div className="join-card glass-card">
+          <div className="room-badge">
+            <i className="bi bi-camera-video-fill" /> Pronto para entrar?
+          </div>
+          <h2 style={{ textAlign: "center" }}>Olá, {name}!</h2>
+          <p style={{ textAlign: "center", color: "var(--text-muted)" }}>Escolha como deseja entrar na chamada.</p>
+
+          <div className="precall-options">
+            <button
+              type="button"
+              className={`precall-toggle ${withMic ? "active" : ""}`}
+              onClick={() => setWithMic((v) => !v)}
+            >
+              <i className={`bi ${withMic ? "bi-mic-fill" : "bi-mic-mute-fill"}`} />
+              <span>{withMic ? "Microfone ligado" : "Microfone desligado"}</span>
+            </button>
+            <button
+              type="button"
+              className={`precall-toggle ${withCam ? "active" : ""}`}
+              onClick={() => setWithCam((v) => !v)}
+            >
+              <i className={`bi ${withCam ? "bi-camera-video-fill" : "bi-camera-video-off-fill"}`} />
+              <span>{withCam ? "Câmera ligada" : "Câmera desligada"}</span>
+            </button>
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ width: "100%" }}
+            onClick={() => onJoined(name, { withMic, withCam })}
+          >
+            <i className="bi bi-box-arrow-in-right" /> Entrar na chamada
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
 /* Experiência da chamada em si                                          */
 /* ---------------------------------------------------------------------- */
 
-export function CallExperience({ roomId, name, minimized = false, onMinimizedChange, onEnded }) {
+export function CallExperience({ roomId, name, minimized = false, mediaPrefs, onMinimizedChange, onEnded }) {
   const navigate = useNavigate();
   const normalizedRoomId = roomId.toUpperCase();
   const { user } = useAuth();
@@ -305,10 +372,12 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
     [pushToast, playSound]
   );
 
-  const handleQuickReaction = useCallback((emoji) => {
+  const handleQuickReaction = useCallback((type) => {
+    const icons = { like: "bi-hand-thumbs-up-fill", heart: "bi-heart-fill", clap: "bi-stars" };
+    const icon = icons[type] || "bi-star-fill";
     const id = Date.now() + Math.random();
-    setReactionBursts((prev) => [...prev, { id, emoji, x: 45 + Math.random() * 10, y: 18 + Math.random() * 12 }]);
-    pushToast(`${name} reagiu com ${emoji}`);
+    setReactionBursts((prev) => [...prev, { id, icon, x: 45 + Math.random() * 10, y: 18 + Math.random() * 12 }]);
+    pushToast(`${name} reagiu`);
     window.setTimeout(() => {
       setReactionBursts((prev) => prev.filter((item) => item.id !== id));
     }, 1800);
@@ -330,6 +399,24 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
     iceServers,
     onEvent: handleCallEvent,
   });
+
+  // Aplica preferências de mic/câmera da tela de pré-entrada
+  const mediaPrefsAppliedRef = useRef(false);
+  useEffect(() => {
+    if (!media.localStream || mediaPrefsAppliedRef.current) return;
+    mediaPrefsAppliedRef.current = true;
+    const audioTrack = media.localStream.getAudioTracks()[0];
+    const videoTrack = media.localStream.getVideoTracks()[0];
+    if (audioTrack) {
+      const wantMic = mediaPrefs?.withMic ?? false;
+      if (audioTrack.enabled !== wantMic) media.toggleMic();
+    }
+    if (videoTrack) {
+      const wantCam = mediaPrefs?.withCam ?? false;
+      if (videoTrack.enabled !== wantCam) media.toggleCam();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [media.localStream]);
 
   // Define a track de vídeo ativa assim que a câmera estiver pronta
   useEffect(() => {
@@ -475,9 +562,10 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
   }
 
   function handleToggleCam() {
+    const next = !media.camOn;
     media.toggleCam();
-    webrtc.broadcastCamState(!media.camOn);
-    pushToast(!media.camOn ? "Câmera ligada" : "Câmera desligada");
+    webrtc.broadcastCamState(next);
+    pushToast(next ? "Câmera ligada" : "Câmera desligada");
   }
 
   const handleToggleRecording = useCallback(() => {
@@ -611,13 +699,15 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
       name: `${name}`,
       avatar: user?.avatar || null,
       isLocal: true,
-      stream: media.localStream,
+      stream: media.isSharingScreen
+        ? (media.screenStream || media.localStream)
+        : media.localStream,
       micOn: media.micOn,
       camOn: media.camOn,
       isSharingScreen: media.isSharingScreen,
       speaking: localSpeaking,
     }),
-    [name, user, media.localStream, media.micOn, media.camOn, media.isSharingScreen, localSpeaking]
+    [name, user, media.localStream, media.screenStream, media.micOn, media.camOn, media.isSharingScreen, localSpeaking]
   );
 
   const inviteUrl = buildInviteUrl(normalizedRoomId);
@@ -742,7 +832,7 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
             className="reaction-burst"
             style={{ left: `${reaction.x}%`, top: `${reaction.y}%` }}
           >
-            {reaction.emoji}
+            <i className={`bi ${reaction.icon}`} />
           </div>
         ))}
       </div>

@@ -310,6 +310,46 @@
   border-top: 1px solid var(--border-subtle);
 }
 
+/* --- Tela de pré-entrada (escolha mic/câmera) --- */
+.precall-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.precall-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.precall-toggle i {
+  font-size: 1.15rem;
+  flex-shrink: 0;
+}
+
+.precall-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.precall-toggle.active {
+  border-color: var(--accent-cyan);
+  background: rgba(34, 211, 238, 0.1);
+  color: var(--accent-cyan);
+}
+
 /* --- Tela "você foi convidado" (entrar via link) --- */
 .join-screen {
   min-height: 100vh;

@@ -51,9 +51,15 @@ export default function CallControls({
       </button>
 
       <div className="reaction-strip" aria-label="Reações rápidas">
-        <button type="button" className="reaction-btn" aria-label="Reagir com coração" onClick={() => onQuickReaction?.("❤️")}>❤️</button>
-        <button type="button" className="reaction-btn" aria-label="Reagir com joinha" onClick={() => onQuickReaction?.("👍")}>👍</button>
-        <button type="button" className="reaction-btn" aria-label="Reagir com festa" onClick={() => onQuickReaction?.("🎉")}>🎉</button>
+        <button type="button" className="reaction-btn" aria-label="Curtir" onClick={() => onQuickReaction?.("like")}>
+          <i className="bi bi-hand-thumbs-up-fill" />
+        </button>
+        <button type="button" className="reaction-btn" aria-label="Amar" onClick={() => onQuickReaction?.("heart")}>
+          <i className="bi bi-heart-fill" />
+        </button>
+        <button type="button" className="reaction-btn" aria-label="Aplaudir" onClick={() => onQuickReaction?.("clap")}>
+          <i className="bi bi-stars" />
+        </button>
       </div>
 
       <div className="control-divider" aria-hidden="true" />
