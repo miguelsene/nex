@@ -127,7 +127,11 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
           socket.emit("ice-candidate", { to, candidate, channel });
         },
         onTrack: (event) => {
-          const [stream] = event.streams;
+          const stream = event.streams[0] || (() => {
+            const s = new MediaStream();
+            s.addTrack(event.track);
+            return s;
+          })();
           updateParticipant(remoteId, { stream });
         },
         onConnectionStateChange: (state) => {
@@ -233,8 +237,10 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
     }
 
     async function handleOffer({ from, offer, meta }) {
+      const isScreenChannel = String(from).includes("#screen");
       const pc = getOrCreatePeerConnection(from, meta);
-      attachLocalTracks(pc);
+      // Não adiciona tracks locais em conexões de tela remota (só recebe)
+      if (!isScreenChannel) attachLocalTracks(pc);
       try {
         // Evita conflito de estado: só processa se não estiver no meio de uma negociação local
         if (pc.signalingState !== "stable" && pc.signalingState !== "have-remote-offer") {
@@ -366,6 +372,52 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
   const broadcastScreenShareStart = useCallback(() => socket.emit("screen-share-started"), [socket]);
   const broadcastScreenShareStop = useCallback(() => socket.emit("screen-share-stopped"), [socket]);
 
+  /**
+   * Cria uma PeerConnection dedicada para a tela (remoteId = "peerId#screen")
+   * e envia offer para cada participante remoto atual.
+   */
+  const startScreenShareOffers = useCallback(
+    async (screenStream) => {
+      const screenTrack = screenStream.getVideoTracks()[0];
+      if (!screenTrack) return;
+      for (const [remoteId] of peerConnections.current) {
+        if (remoteId.includes("#")) continue; // já é canal sintético
+        const screenPeerId = `${remoteId}#screen`;
+        let pc = peerConnections.current.get(screenPeerId);
+        if (!pc) {
+          pc = createPeerConnection(iceServersRef.current, {
+            onIceCandidate: (candidate) => {
+              socket.emit("ice-candidate", { to: remoteId, candidate, channel: "screen" });
+            },
+            onTrack: () => {},
+            onConnectionStateChange: () => {},
+          });
+          peerConnections.current.set(screenPeerId, pc);
+        }
+        // Adiciona apenas a track de tela (sem áudio duplicado)
+        if (!pc.getSenders().find((s) => s.track?.kind === "video")) {
+          pc.addTrack(screenTrack, screenStream);
+        }
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          socket.emit("offer", { to: remoteId, offer: pc.localDescription, channel: "screen" });
+        } catch {
+          // ignora falha pontual
+        }
+      }
+    },
+    [socket]
+  );
+
+  const stopScreenShareConnections = useCallback(() => {
+    for (const [remoteId] of [...peerConnections.current]) {
+      if (remoteId.includes("#screen")) {
+        closePeerConnection(remoteId);
+      }
+    }
+  }, [closePeerConnection]);
+
   const broadcastSpeaking = useCallback(
     (isSpeaking) => socket.emit("speaking", { isSpeaking }),
     [socket]
@@ -420,5 +472,7 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
     broadcastSpeaking,
     replaceOutgoingTrack,
     setActiveVideoTrack,
+    startScreenShareOffers,
+    stopScreenShareConnections,
   };
 }

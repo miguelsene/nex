@@ -60,13 +60,19 @@ export function registerSocketHandlers(io, socket) {
     if (!to || !answer) return;
     const fromId = channel ? `${socket.id}#${channel}` : socket.id;
     const senderMeta = roomManager.listParticipants(currentRoomId || "").find((p) => p.id === socket.id);
-    io.to(to).emit("answer", { from: fromId, answer, meta: senderMeta || null });
+    // Extract real socket id from "to" in case it has a channel suffix (e.g. "abc123#screen")
+    const realTo = to.split("#")[0];
+    const toChannel = to.split("#")[1];
+    const answerFromId = toChannel ? `${socket.id}#${toChannel}` : fromId;
+    io.to(realTo).emit("answer", { from: answerFromId, answer, meta: senderMeta || null });
   });
 
   socket.on("ice-candidate", ({ to, candidate, channel }) => {
     if (!to || !candidate) return;
-    const fromId = channel ? `${socket.id}#${channel}` : socket.id;
-    io.to(to).emit("ice-candidate", { from: fromId, candidate });
+    const realTo = to.split("#")[0];
+    const toChannel = to.split("#")[1];
+    const fromId = (toChannel || channel) ? `${socket.id}#${toChannel || channel}` : socket.id;
+    io.to(realTo).emit("ice-candidate", { from: fromId, candidate });
   });
 
   // --- Estado do participante ---

@@ -589,23 +589,17 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
 
   async function handleToggleScreenShare() {
     if (media.isSharingScreen) {
-      // Para o compartilhamento de tela — remove o participante sintético no servidor
       media.stopScreenShare();
       webrtc.setActiveVideoTrack(media.localStream?.getVideoTracks()[0] || null);
       webrtc.replaceOutgoingTrack("video", media.localStream?.getVideoTracks()[0] || null);
+      webrtc.stopScreenShareConnections();
       webrtc.broadcastScreenShareStop();
     } else {
       const screenStream = await media.startScreenShare();
       if (!screenStream) return;
-      // Criamos um participante sintético identificado por `${selfSocketId}#screen`.
-      // Em vez de substituir imediatamente a track local, repassamos o stream de tela
-      // para o hook WebRTC como objeto MediaStream para que ele use como origem.
       webrtc.setActiveVideoTrack(screenStream);
-      // substitui as tracks de vídeo em todos os peerConnections usando o canal 'screen'
-      // para que o servidor repasse para os peers como um participante separado
-      // Altera a lógica de signaling para enviar channel='screen' no offer/answer
-      webrtc.replaceOutgoingTrack("video", screenStream.getVideoTracks()[0]);
       webrtc.broadcastScreenShareStart();
+      await webrtc.startScreenShareOffers(screenStream);
     }
   }
 
