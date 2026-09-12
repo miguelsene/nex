@@ -273,8 +273,11 @@ export function useMediaDevices() {
     screenStreamRef.current = null;
     setScreenStream(null);
     setIsSharingScreen(false);
-    setLocalStream(cameraStreamRef.current || null);
-    return null;
+    // Retorna a camera stream para que o caller possa pegar a track atualizada
+    // antes que o estado React seja atualizado de forma assíncrona
+    const cam = cameraStreamRef.current || null;
+    setLocalStream(cam);
+    return cam;
   }, []);
 
   return {

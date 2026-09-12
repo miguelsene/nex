@@ -8,8 +8,9 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
   const [participants, setParticipants] = useState(new Map());
   const [messages, setMessages] = useState([]);
 
-  const pcs = useRef(new Map());               // peerId -> RTCPeerConnection
-  const pending = useRef(new Map());           // peerId -> ICECandidate[]
+  const pcs = useRef(new Map());          // peerId -> RTCPeerConnection
+  const streams = useRef(new Map());      // peerId -> MediaStream (acumula tracks)
+  const pending = useRef(new Map());      // peerId -> ICECandidate[]
   const localStreamRef = useRef(localStream);
   const iceServersRef = useRef(iceServers);
   const participantsRef = useRef(participants);
@@ -32,7 +33,6 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
     setParticipants((prev) => { const next = new Map(prev); next.delete(id); return next; });
   }, []);
 
-  // Adiciona todas as tracks locais na PC (áudio + vídeo)
   const attachTracks = useCallback((pc) => {
     const stream = localStreamRef.current;
     if (!stream) return;
@@ -52,25 +52,42 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
     pending.current.delete(peerId);
   }, []);
 
+  const getOrCreateStream = useCallback((peerId) => {
+    if (!streams.current.has(peerId)) {
+      streams.current.set(peerId, new MediaStream());
+    }
+    return streams.current.get(peerId);
+  }, []);
+
   const createPC = useCallback((peerId, meta) => {
-    const existing = pcs.current.get(peerId);
-    if (existing) return existing;
+    if (pcs.current.has(peerId)) return pcs.current.get(peerId);
 
     const pc = createPeerConnection(iceServersRef.current, {
       onIceCandidate: (candidate) => {
         socket.emit("ice-candidate", { to: peerId, candidate });
       },
       onTrack: (event) => {
-        // Garante que sempre temos um stream válido com a track
-        let stream = event.streams[0];
-        if (!stream) {
-          stream = new MediaStream();
-          stream.addTrack(event.track);
-        }
-        updateParticipant(peerId, { stream });
+        // Acumula todas as tracks no mesmo MediaStream persistente do peer
+        const remoteStream = getOrCreateStream(peerId);
+        const track = event.track;
+
+        // Remove track antiga do mesmo kind se existir
+        remoteStream.getTracks()
+          .filter((t) => t.kind === track.kind)
+          .forEach((t) => remoteStream.removeTrack(t));
+
+        remoteStream.addTrack(track);
+
+        // Quando a track terminar, remove do stream
+        track.addEventListener("ended", () => {
+          remoteStream.removeTrack(track);
+        });
+
+        updateParticipant(peerId, { stream: remoteStream });
       },
       onConnectionStateChange: (state) => {
         if (state === "failed") updateParticipant(peerId, { connectionLost: true });
+        if (state === "closed") removeParticipant(peerId);
       },
     });
 
@@ -85,11 +102,12 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
       isSharingScreen: meta?.isSharingScreen ?? false,
     });
     return pc;
-  }, [socket, updateParticipant]);
+  }, [socket, updateParticipant, removeParticipant, getOrCreateStream]);
 
   const closePC = useCallback((peerId) => {
     pcs.current.get(peerId)?.close();
     pcs.current.delete(peerId);
+    streams.current.delete(peerId);
     pending.current.delete(peerId);
   }, []);
 
@@ -104,9 +122,8 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
     } catch { /* ignora */ }
   }, [attachTracks, createPC, socket]);
 
-  // Join — dispara assim que socket, stream e iceServers estiverem prontos
+  // Join
   useEffect(() => {
-    // iceServers pode ser null (falha no fetch) — usa STUN padrão nesse caso, não bloqueia
     if (!socket || !roomId || !name || !localStream) return;
     if (joinedRef.current) return;
 
@@ -192,17 +209,24 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
       }
     }
 
+    function onToggleAudio({ id, micOn }) { updateParticipant(id, { micOn }); }
+    function onToggleVideo({ id, camOn }) { updateParticipant(id, { camOn }); }
+    function onScreenShareStarted({ id }) { updateParticipant(id, { isSharingScreen: true }); }
+    function onScreenShareStopped({ id }) { updateParticipant(id, { isSharingScreen: false }); }
+    function onSpeaking({ id, isSpeaking }) { updateParticipant(id, { speaking: isSpeaking }); }
+    function onChatMessage(msg) { setMessages((prev) => [...prev, msg]); }
+
     socket.on("user-joined", onUserJoined);
     socket.on("user-left", onUserLeft);
     socket.on("offer", onOffer);
     socket.on("answer", onAnswer);
     socket.on("ice-candidate", onIceCandidate);
-    socket.on("toggle-audio", ({ id, micOn }) => updateParticipant(id, { micOn }));
-    socket.on("toggle-video", ({ id, camOn }) => updateParticipant(id, { camOn }));
-    socket.on("screen-share-started", ({ id }) => updateParticipant(id, { isSharingScreen: true }));
-    socket.on("screen-share-stopped", ({ id }) => updateParticipant(id, { isSharingScreen: false }));
-    socket.on("speaking", ({ id, isSpeaking }) => updateParticipant(id, { speaking: isSpeaking }));
-    socket.on("chat-message", (msg) => setMessages((prev) => [...prev, msg]));
+    socket.on("toggle-audio", onToggleAudio);
+    socket.on("toggle-video", onToggleVideo);
+    socket.on("screen-share-started", onScreenShareStarted);
+    socket.on("screen-share-stopped", onScreenShareStopped);
+    socket.on("speaking", onSpeaking);
+    socket.on("chat-message", onChatMessage);
 
     return () => {
       socket.off("user-joined", onUserJoined);
@@ -210,12 +234,12 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
       socket.off("offer", onOffer);
       socket.off("answer", onAnswer);
       socket.off("ice-candidate", onIceCandidate);
-      socket.off("toggle-audio");
-      socket.off("toggle-video");
-      socket.off("screen-share-started");
-      socket.off("screen-share-stopped");
-      socket.off("speaking");
-      socket.off("chat-message");
+      socket.off("toggle-audio", onToggleAudio);
+      socket.off("toggle-video", onToggleVideo);
+      socket.off("screen-share-started", onScreenShareStarted);
+      socket.off("screen-share-stopped", onScreenShareStopped);
+      socket.off("speaking", onSpeaking);
+      socket.off("chat-message", onChatMessage);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, attachTracks, closePC, createPC, flushPending, removeParticipant, updateParticipant]);
@@ -225,41 +249,39 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
       joinedRef.current = false;
       pcs.current.forEach((pc) => pc.close());
       pcs.current.clear();
+      streams.current.clear();
       pending.current.clear();
     };
   }, []);
 
-  // Substitui uma track em todas as PCs ativas (ex: câmera -> tela ou vice-versa)
-  const replaceOutgoingTrack = useCallback((kind, newTrack) => {
-    pcs.current.forEach(async (pc, peerId) => {
+  const replaceOutgoingTrack = useCallback(async (kind, newTrack) => {
+    for (const [peerId, pc] of pcs.current) {
       const sender = pc.getSenders().find((s) => s.track?.kind === kind);
       if (sender) {
         await sender.replaceTrack(newTrack).catch(() => {});
       } else if (newTrack) {
         const stream = localStreamRef.current || new MediaStream([newTrack]);
-        try { pc.addTrack(newTrack, stream); } catch { return; }
         try {
+          pc.addTrack(newTrack, stream);
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
           socket.emit("offer", { to: peerId, offer: pc.localDescription });
         } catch { /* ignora */ }
       }
-    });
+    }
   }, [socket]);
 
+  const broadcastMicState = useCallback((micOn) => socket.emit("toggle-audio", { micOn }), [socket]);
+  const broadcastCamState = useCallback((camOn) => socket.emit("toggle-video", { camOn }), [socket]);
+  const broadcastScreenShareStart = useCallback(() => socket.emit("screen-share-started"), [socket]);
+  const broadcastScreenShareStop = useCallback(() => socket.emit("screen-share-stopped"), [socket]);
+  const broadcastSpeaking = useCallback((isSpeaking) => socket.emit("speaking", { isSpeaking }), [socket]);
+  const sendChatMessage = useCallback((text) => { if (text?.trim()) socket.emit("chat-message", { text: text.trim() }); }, [socket]);
+
   return {
-    joined,
-    joinError,
-    selfId,
-    participants,
-    messages,
-    sendChatMessage: useCallback((text) => { if (text?.trim()) socket.emit("chat-message", { text: text.trim() }); }, [socket]),
-    broadcastMicState: useCallback((micOn) => socket.emit("toggle-audio", { micOn }), [socket]),
-    broadcastCamState: useCallback((camOn) => socket.emit("toggle-video", { camOn }), [socket]),
-    broadcastScreenShareStart: useCallback(() => socket.emit("screen-share-started"), [socket]),
-    broadcastScreenShareStop: useCallback(() => socket.emit("screen-share-stopped"), [socket]),
-    broadcastSpeaking: useCallback((isSpeaking) => socket.emit("speaking", { isSpeaking }), [socket]),
-    replaceOutgoingTrack,
-    setActiveVideoTrack: useCallback(() => {}, []), // mantido por compatibilidade
+    joined, joinError, selfId, participants, messages,
+    sendChatMessage, broadcastMicState, broadcastCamState,
+    broadcastScreenShareStart, broadcastScreenShareStop,
+    broadcastSpeaking, replaceOutgoingTrack,
   };
 }
