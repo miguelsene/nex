@@ -944,7 +944,7 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
             </div>
           </div>
           <div className="mini-call-actions">
-            <button type="button" className="icon-btn" data-tooltip="InÃ­cio" onClick={() => openAppPage("/")}>
+            <button type="button" className="icon-btn" data-tooltip="Início" onClick={() => openAppPage("/")}>
               <i className="bi bi-house-fill" />
             </button>
             <button type="button" className="icon-btn" data-tooltip="Painel" onClick={() => openAppPage("/dashboard")}>
@@ -996,7 +996,7 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
               onChange={(event) => handleParticipantVolume(participantMenu.participant.id, event.target.value)}
             />
           </label>
-          {participantMenu.participant.isLocal && <small>Seu prÃ³prio Ã¡udio fica silenciado localmente para evitar eco.</small>}
+          {participantMenu.participant.isLocal && <small>Seu próprio áudio fica silenciado localmente para evitar eco.</small>}
         </div>
       )}
 

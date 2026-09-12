@@ -57,25 +57,38 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
   const attachLocalTracks = useCallback((pc) => {
     const stream = localStreamRef.current;
     if (!stream) return;
-    const existingKinds = new Set(pc.getSenders().map((s) => s.track?.kind).filter(Boolean));
+    const senders = pc.getSenders();
+    const existingKinds = new Set(senders.map((s) => s.track?.kind).filter(Boolean));
 
     const audioTrack = stream.getAudioTracks()[0];
     if (audioTrack && !existingKinds.has("audio")) {
       pc.addTrack(audioTrack, stream);
     }
 
-    // Usa a track de vídeo ativa (câmera ou compartilhamento de tela em andamento)
-    // Se a track ativa for um objeto MediaStream (compartilhamento de tela retornado), trata separadamente
     const active = activeVideoTrackRef.current;
-    if (active && typeof active === "object" && active.getVideoTracks) {
+    // Se active é um MediaStream (tela), usa a primeira track de vídeo dele
+    if (active && typeof active.getVideoTracks === "function") {
       const screenTrack = active.getVideoTracks()[0];
-      if (screenTrack && !existingKinds.has("video")) pc.addTrack(screenTrack, active);
+      if (screenTrack && !existingKinds.has("video")) {
+        pc.addTrack(screenTrack, active);
+      } else if (screenTrack && existingKinds.has("video")) {
+        const sender = senders.find((s) => s.track?.kind === "video");
+        sender?.replaceTrack(screenTrack).catch(() => {});
+      }
       return;
     }
 
-    const videoTrack = active || stream.getVideoTracks()[0];
-    if (videoTrack && !existingKinds.has("video")) {
-      pc.addTrack(videoTrack, stream);
+    // Track de vídeo da câmera (pode estar enabled=false, mas precisa ser enviada)
+    const videoTrack = (active instanceof MediaStreamTrack ? active : null) || stream.getVideoTracks()[0];
+    if (videoTrack) {
+      if (!existingKinds.has("video")) {
+        pc.addTrack(videoTrack, stream);
+      } else {
+        const sender = senders.find((s) => s.track?.kind === "video");
+        if (sender && sender.track !== videoTrack) {
+          sender.replaceTrack(videoTrack).catch(() => {});
+        }
+      }
     }
   }, []);
 
@@ -232,9 +245,11 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
       }
     }
 
-    async function handleAnswer({ from, answer }) {
+    async function handleAnswer({ from, answer, meta }) {
       const pc = peerConnections.current.get(from);
       if (!pc) return;
+      // Atualiza metadados se chegaram junto com o answer
+      if (meta) updateParticipant(from, { name: meta.name, avatar: meta.avatar || null, userId: meta.userId || null });
       try {
         await pc.setRemoteDescription(answer);
         await flushPendingCandidates(from, pc);

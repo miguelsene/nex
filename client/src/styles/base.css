@@ -151,6 +151,31 @@ select {
   background: var(--bg-base);
 }
 
+/* Touch targets mínimos para mobile */
+@media (max-width: 860px) {
+  button, a, select, input[type="range"] {
+    min-height: 44px;
+  }
+
+  .btn {
+    padding: 13px 22px;
+    font-size: 0.9rem;
+  }
+
+  .modal-card,
+  .settings-modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: var(--radius-md) var(--radius-md) 0 0 !important;
+    max-height: 92dvh !important;
+  }
+
+  .modal-overlay {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

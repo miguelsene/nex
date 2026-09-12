@@ -51,13 +51,16 @@ export function registerSocketHandlers(io, socket) {
   socket.on("offer", ({ to, offer, channel }) => {
     if (!to || !offer) return;
     const fromId = channel ? `${socket.id}#${channel}` : socket.id;
-    io.to(to).emit("offer", { from: fromId, offer });
+    // Inclui metadados do remetente para o destinatário identificar quem é
+    const senderMeta = roomManager.listParticipants(currentRoomId || "").find((p) => p.id === socket.id);
+    io.to(to).emit("offer", { from: fromId, offer, meta: senderMeta || null });
   });
 
   socket.on("answer", ({ to, answer, channel }) => {
     if (!to || !answer) return;
     const fromId = channel ? `${socket.id}#${channel}` : socket.id;
-    io.to(to).emit("answer", { from: fromId, answer });
+    const senderMeta = roomManager.listParticipants(currentRoomId || "").find((p) => p.id === socket.id);
+    io.to(to).emit("answer", { from: fromId, answer, meta: senderMeta || null });
   });
 
   socket.on("ice-candidate", ({ to, candidate, channel }) => {

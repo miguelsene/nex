@@ -370,6 +370,18 @@
   text-align: center;
 }
 
+@media (max-width: 500px) {
+  .join-card {
+    padding: 28px 20px;
+    border-radius: var(--radius-md);
+  }
+
+  .join-screen {
+    padding: 12px;
+    align-items: flex-end;
+  }
+}
+
 .join-card .room-badge {
   display: flex;
   align-items: center;
