@@ -168,7 +168,7 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
   // --- Entra na sala assim que socket e mídia local estiverem prontos ---
   useEffect(() => {
     if (!socket || !roomId || !name || !localStream) return;
-    if (joinedRef.current) return; // evita join duplo se userId/avatar chegarem depois
+    if (joinedRef.current) return;
     joinedRef.current = true;
 
     socket.emit("join-room", { roomId, name, avatar, userId }, async (response) => {
@@ -213,9 +213,9 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
       if (leaving) onEvent?.({ type: "left", name: leaving.name });
     }
 
-    async function handleOffer({ from, offer }) {
+    async function handleOffer({ from, offer, meta }) {
       // `from` pode ser no formato 'socketId#screen' quando for um participante sintético
-      const pc = getOrCreatePeerConnection(from);
+      const pc = getOrCreatePeerConnection(from, meta);
       attachLocalTracks(pc);
       try {
         await pc.setRemoteDescription(offer);
@@ -313,6 +313,7 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
   // --- Encerra todas as conexões ao desmontar ---
   useEffect(() => {
     return () => {
+      joinedRef.current = false;
       peerConnections.current.forEach((pc) => pc.close());
       peerConnections.current.clear();
       pendingCandidates.current.clear();

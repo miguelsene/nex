@@ -36,10 +36,11 @@ let socket = null;
 
 /**
  * Retorna a instância singleton do socket, criando-a (sem conectar
- * automaticamente) na primeira chamada.
+ * automaticamente) na primeira chamada. Se o socket anterior foi
+ * desconectado manualmente, cria um novo.
  */
 export function getSocket() {
-  if (!socket) {
+  if (!socket || socket.disconnected && !socket.active) {
     socket = io(SERVER_URL, {
       autoConnect: false,
       transports: ["websocket", "polling"],
@@ -50,6 +51,14 @@ export function getSocket() {
     });
   }
   return socket;
+}
+
+export function resetSocket() {
+  if (socket) {
+    socket.removeAllListeners();
+    if (socket.connected) socket.disconnect();
+    socket = null;
+  }
 }
 
 export function disconnectSocket() {

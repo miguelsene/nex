@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { getInitials } from "../utils/format.js";
 
 export default function VideoCard({
@@ -21,22 +21,19 @@ export default function VideoCard({
   onOpenMenu,
 }) {
   const videoRef = useRef(null);
+  const containerRef = useRef(null);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     if (stream) {
-      if (video.srcObject !== stream) {
-        video.srcObject = stream;
-      }
-      // Força re-play quando a stream muda de tracks (ex: compartilhamento de tela)
+      if (video.srcObject !== stream) video.srcObject = stream;
       video.play().catch(() => {});
     } else {
       video.srcObject = null;
     }
   }, [stream]);
 
-  // Re-attach quando as tracks da stream mudam (câmera -> tela e vice-versa)
   useEffect(() => {
     if (!stream) return;
     const video = videoRef.current;
@@ -63,10 +60,22 @@ export default function VideoCard({
     videoRef.current.volume = Math.min(1, Math.max(0, volume));
   }, [volume, isLocal]);
 
+  const handleFullscreen = useCallback((e) => {
+    e.stopPropagation();
+    const el = containerRef.current;
+    if (!el) return;
+    if (document.fullscreenElement === el) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      el.requestFullscreen().catch(() => {});
+    }
+  }, []);
+
   const showVideo = camOn || isSharingScreen;
 
   return (
     <div
+      ref={containerRef}
       className={[
         "video-card",
         speaking ? "is-speaking" : "",
@@ -78,11 +87,13 @@ export default function VideoCard({
         .filter(Boolean)
         .join(" ")}
       onDoubleClick={onTogglePin}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        onOpenMenu?.({ event, participant: { id, name, isLocal, micOn, camOn, isSharingScreen } });
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onOpenMenu?.({ event: e, participant: { id, name, isLocal, micOn, camOn, isSharingScreen } });
       }}
     >
+      {speaking && <div className="speaking-ring" />}
+
       <video ref={videoRef} autoPlay playsInline muted={isLocal} />
 
       <div className="avatar-fallback">
@@ -90,6 +101,7 @@ export default function VideoCard({
           ? <img src={avatar} alt={name} className="avatar-circle" style={{ objectFit: "cover" }} />
           : <div className="avatar-circle">{getInitials(name)}</div>
         }
+        <span className="avatar-name">{name}</span>
       </div>
 
       <div className="video-card-badge">
@@ -105,12 +117,18 @@ export default function VideoCard({
         type="button"
         className="video-pin-btn"
         data-tooltip={isPinned ? "Restaurar grade" : "Maximizar"}
-        onClick={(event) => {
-          event.stopPropagation();
-          onTogglePin?.();
-        }}
+        onClick={(e) => { e.stopPropagation(); onTogglePin?.(); }}
       >
         <i className={`bi ${isPinned ? "bi-fullscreen-exit" : "bi-arrows-fullscreen"}`} />
+      </button>
+
+      <button
+        type="button"
+        className="video-fullscreen-btn"
+        data-tooltip="Tela cheia"
+        onClick={handleFullscreen}
+      >
+        <i className="bi bi-fullscreen" />
       </button>
 
       {isPinned && (
@@ -118,10 +136,7 @@ export default function VideoCard({
           type="button"
           className="video-focus-btn"
           data-tooltip={focusMode ? "Mostrar participantes" : "Ocultar participantes"}
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggleFocus?.();
-          }}
+          onClick={(e) => { e.stopPropagation(); onToggleFocus?.(); }}
         >
           <i className={`bi ${focusMode ? "bi-layout-sidebar-inset" : "bi-person-video2"}`} />
         </button>

@@ -10,6 +10,7 @@ import { useWebRTC } from "../hooks/useWebRTC.js";
 import { useSpeakingDetector } from "../hooks/useSpeakingDetector.js";
 import { useAuth } from "../hooks/useAuth.jsx";
 import { saveCallRecord, sendFriendRequest, getContacts } from "../services/social.js";
+import { resetSocket } from "../services/socket.js";
 
 import VideoGrid from "../components/VideoGrid.jsx";
 import CallControls from "../components/CallControls.jsx";
@@ -296,12 +297,38 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
     }, 3500);
   }, []);
 
+  const playSound = useCallback((type) => {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      if (type === "join") {
+        osc.frequency.setValueAtTime(520, ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(780, ctx.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.18, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.28);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.28);
+      } else {
+        osc.frequency.setValueAtTime(520, ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(320, ctx.currentTime + 0.18);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.32);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.32);
+      }
+      osc.onended = () => ctx.close();
+    } catch {}
+  }, []);
+
   const handleCallEvent = useCallback(
     (event) => {
-      if (event.type === "joined") pushToast(`${event.name} entrou na chamada`);
-      if (event.type === "left") pushToast(`${event.name} saiu da chamada`);
+      if (event.type === "joined") { pushToast(`${event.name} entrou na chamada`); playSound("join"); }
+      if (event.type === "left") { pushToast(`${event.name} saiu da chamada`); playSound("leave"); }
     },
-    [pushToast]
+    [pushToast, playSound]
   );
 
   // Define a track de vídeo ativa assim que a câmera estiver pronta
@@ -558,9 +585,8 @@ export function CallExperience({ roomId, name, minimized = false, onMinimizedCha
     }
     sessionStorage.setItem("nexa_last_room", JSON.stringify({ roomId: normalizedRoomId, name, at: Date.now() }));
     socket.emit("leave-room");
-    socket.disconnect();
     onEnded?.();
-    pushToast("Você saiu da sala.");
+    resetSocket();
     navigate("/");
   }
 

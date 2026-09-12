@@ -48,24 +48,20 @@ export function registerSocketHandlers(io, socket) {
   });
 
   // --- Sinalização WebRTC (repasse direto entre pares, ponto a ponto) ---
-  socket.on("offer", ({ to, offer }) => {
+  socket.on("offer", ({ to, offer, channel }) => {
     if (!to || !offer) return;
-    // Suporta canal opcional (ex: 'screen') enviado pelo cliente
-    const channel = typeof arguments[0] === 'object' && arguments[0]?.channel ? arguments[0].channel : null;
     const fromId = channel ? `${socket.id}#${channel}` : socket.id;
     io.to(to).emit("offer", { from: fromId, offer });
   });
 
-  socket.on("answer", ({ to, answer }) => {
+  socket.on("answer", ({ to, answer, channel }) => {
     if (!to || !answer) return;
-    const channel = typeof arguments[0] === 'object' && arguments[0]?.channel ? arguments[0].channel : null;
     const fromId = channel ? `${socket.id}#${channel}` : socket.id;
     io.to(to).emit("answer", { from: fromId, answer });
   });
 
-  socket.on("ice-candidate", ({ to, candidate }) => {
+  socket.on("ice-candidate", ({ to, candidate, channel }) => {
     if (!to || !candidate) return;
-    const channel = typeof arguments[0] === 'object' && arguments[0]?.channel ? arguments[0].channel : null;
     const fromId = channel ? `${socket.id}#${channel}` : socket.id;
     io.to(to).emit("ice-candidate", { from: fromId, candidate });
   });
