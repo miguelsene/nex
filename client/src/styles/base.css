@@ -20,19 +20,17 @@ body {
   overflow-x: hidden;
 }
 
-h1,
-h2,
-h3,
-h4 {
+h1, h2, h3, h4 {
   font-family: var(--font-display);
   margin: 0;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
 }
 
 p {
   margin: 0;
   color: var(--text-secondary);
-  line-height: 1.6;
+  line-height: 1.65;
 }
 
 a {
@@ -45,8 +43,7 @@ button {
   cursor: pointer;
 }
 
-input,
-select {
+input, select {
   font-family: inherit;
 }
 
@@ -57,88 +54,84 @@ select {
 
 :focus-visible {
   outline: 2px solid var(--accent-cyan);
-  outline-offset: 2px;
+  outline-offset: 3px;
   border-radius: 6px;
 }
 
 /* Scrollbar discreta */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
   background: var(--border-strong);
   border-radius: var(--radius-pill);
 }
 
+/* --- Botões --- */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 14px 28px;
+  padding: 13px 26px;
   border-radius: var(--radius-pill);
   border: 1px solid transparent;
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
+  letter-spacing: -0.01em;
   transition: transform var(--transition-fast), box-shadow var(--transition-fast),
-    background var(--transition-fast), border-color var(--transition-fast);
+    background var(--transition-fast), filter var(--transition-fast);
   white-space: nowrap;
   flex: 0 0 auto;
 }
 
-.btn:active {
-  transform: scale(0.97);
-}
+.btn:active { transform: scale(0.96); }
 
 .btn-primary {
   background: var(--gradient-aurora);
-  color: #0a0d16;
+  color: #06070f;
   box-shadow: var(--shadow-glow-violet);
 }
-
 .btn-primary:hover {
-  filter: brightness(1.08);
-  box-shadow: 0 0 55px rgba(124, 92, 252, 0.5);
+  filter: brightness(1.1);
+  box-shadow: 0 0 60px rgba(139, 111, 255, 0.45);
+  transform: translateY(-1px);
 }
 
 .btn-ghost {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.05);
   border-color: var(--border-subtle);
   color: var(--text-primary);
 }
-
 .btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.09);
   border-color: var(--border-strong);
+  transform: translateY(-1px);
 }
 
 .btn-danger {
   background: linear-gradient(135deg, var(--danger), var(--danger-strong));
   color: white;
 }
-
 .btn-danger:hover {
   filter: brightness(1.1);
-  box-shadow: 0 0 30px rgba(255, 77, 109, 0.45);
+  box-shadow: 0 0 30px rgba(244, 63, 94, 0.4);
 }
 
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
   transform: none !important;
+  filter: none !important;
 }
 
+/* --- Glass card --- */
 .glass-card {
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
-  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  box-shadow: var(--shadow-card);
 }
 
 .not-found {
@@ -156,20 +149,16 @@ select {
   button, a, select, input[type="range"] {
     min-height: 44px;
   }
-
   .btn {
-    padding: 13px 22px;
-    font-size: 0.9rem;
+    padding: 12px 20px;
+    font-size: 0.88rem;
   }
-
-  .modal-card,
-  .settings-modal {
+  .modal-card, .settings-modal {
     width: 100% !important;
     max-width: 100% !important;
     border-radius: var(--radius-md) var(--radius-md) 0 0 !important;
     max-height: 92dvh !important;
   }
-
   .modal-overlay {
     align-items: flex-end !important;
     padding: 0 !important;
@@ -177,9 +166,7 @@ select {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;

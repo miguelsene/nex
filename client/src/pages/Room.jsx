@@ -22,10 +22,9 @@ import MusicPlayer from "../components/MusicPlayer.jsx";
 import NexLogo from "../components/NexLogo.jsx";
 import ThemePicker from "../components/ThemePicker.jsx";
 
-export default function Room({ activeCall, onStartCall }) {
+export default function Room() {
   const { roomId } = useParams();
   const location = useLocation();
-  const navigate = useNavigate();
 
   const [confirmedName, setConfirmedName] = useState(location.state?.name || null);
   const [mediaPrefs, setMediaPrefs] = useState(location.state?.mediaPrefs || null);
@@ -39,38 +38,7 @@ export default function Room({ activeCall, onStartCall }) {
     return <JoinScreen roomId={roomId} onJoined={handleJoined} />;
   }
 
-  if (onStartCall) {
-    return (
-      <StartPersistentCall
-        activeCall={activeCall}
-        roomId={roomId}
-        name={confirmedName}
-        mediaPrefs={mediaPrefs}
-        onStartCall={onStartCall}
-      />
-    );
-  }
-
   return <CallExperience roomId={roomId} name={confirmedName} mediaPrefs={mediaPrefs} />;
-}
-
-function StartPersistentCall({ activeCall, roomId, name, mediaPrefs, onStartCall }) {
-  const normalizedRoomId = roomId.toUpperCase();
-
-  useEffect(() => {
-    if (activeCall?.roomId === normalizedRoomId) return;
-    onStartCall({ roomId: normalizedRoomId, name, mediaPrefs, minimized: false });
-  }, [activeCall?.roomId, name, normalizedRoomId, onStartCall, mediaPrefs]);
-
-  if (activeCall?.roomId === normalizedRoomId) return null;
-
-  return (
-    <div className="full-screen-loader rpg-loader">
-      <NexLogo size={76} />
-      <div className="spinner" />
-      <p>Abrindo chamada...</p>
-    </div>
-  );
 }
 
 /* ---------------------------------------------------------------------- */
@@ -520,7 +488,6 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
     setParticipantMenu(null);
     setShowInvite(false);
     setShowSettings(false);
-    setMinimizedState(true);
     pushToast("Chamada minimizada");
     sessionStorage.setItem("nexa_active_call", JSON.stringify({ roomId: normalizedRoomId, name, at: Date.now() }));
     navigate("/");
@@ -565,6 +532,11 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
     const next = !media.camOn;
     media.toggleCam();
     webrtc.broadcastCamState(next);
+    // Envia a track de vídeo para todos os peers (negocia se necessário)
+    const videoTrack = media.localStream?.getVideoTracks()[0] || null;
+    if (videoTrack) {
+      webrtc.replaceOutgoingTrack("video", videoTrack);
+    }
     pushToast(next ? "Câmera ligada" : "Câmera desligada");
   }
 
@@ -665,11 +637,7 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
     const durationSeconds = Math.floor((Date.now() - callStartRef.current) / 1000);
     const participantNames = Array.from(webrtc.participants.values()).map((p) => p.name);
     if (user) {
-      saveCallRecord(user.id, {
-        roomId: normalizedRoomId,
-        participants: participantNames,
-        durationSeconds,
-      });
+      saveCallRecord(user.id, { roomId: normalizedRoomId, participants: participantNames, durationSeconds });
     }
     sessionStorage.setItem("nexa_last_room", JSON.stringify({ roomId: normalizedRoomId, name, at: Date.now() }));
     socket.emit("leave-room");

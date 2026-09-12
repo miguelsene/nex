@@ -66,26 +66,29 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
     }
 
     const active = activeVideoTrackRef.current;
+
     // Se active é um MediaStream (tela), usa a primeira track de vídeo dele
     if (active && typeof active.getVideoTracks === "function") {
       const screenTrack = active.getVideoTracks()[0];
-      if (screenTrack && !existingKinds.has("video")) {
-        pc.addTrack(screenTrack, active);
-      } else if (screenTrack && existingKinds.has("video")) {
-        const sender = senders.find((s) => s.track?.kind === "video");
-        sender?.replaceTrack(screenTrack).catch(() => {});
+      if (screenTrack) {
+        if (!existingKinds.has("video")) {
+          pc.addTrack(screenTrack, active);
+        } else {
+          const sender = senders.find((s) => s.track?.kind === "video");
+          sender?.replaceTrack(screenTrack).catch(() => {});
+        }
       }
       return;
     }
 
-    // Track de vídeo da câmera (pode estar enabled=false, mas precisa ser enviada)
+    // Track de vídeo da câmera — sempre adiciona mesmo se disabled
     const videoTrack = (active instanceof MediaStreamTrack ? active : null) || stream.getVideoTracks()[0];
     if (videoTrack) {
       if (!existingKinds.has("video")) {
         pc.addTrack(videoTrack, stream);
       } else {
         const sender = senders.find((s) => s.track?.kind === "video");
-        if (sender && sender.track !== videoTrack) {
+        if (sender && sender.track?.id !== videoTrack.id) {
           sender.replaceTrack(videoTrack).catch(() => {});
         }
       }
@@ -178,35 +181,38 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
     [attachLocalTracks, getOrCreatePeerConnection, socket]
   );
 
-  // --- Entra na sala assim que socket e mídia local estiverem prontos ---
+  // --- Entra na sala assim que socket conectado, mídia local e iceServers estiverem prontos ---
   useEffect(() => {
-    if (!socket || !roomId || !name || !localStream) return;
+    if (!socket || !roomId || !name || !localStream || !iceServers) return;
     if (joinedRef.current) return;
-    joinedRef.current = true;
 
-    socket.emit("join-room", { roomId, name, avatar, userId }, async (response) => {
-      if (!response?.ok) {
-        setJoinError(response?.error || "Não foi possível entrar na sala.");
-        joinedRef.current = false;
-        return;
-      }
+    function doJoin() {
+      if (joinedRef.current) return;
+      if (!localStreamRef.current) return;
+      joinedRef.current = true;
 
-      setSelfId(response.self.id);
-      setJoined(true);
+      socket.emit("join-room", { roomId, name, avatar, userId }, async (response) => {
+        if (!response?.ok) {
+          setJoinError(response?.error || "Não foi possível entrar na sala.");
+          joinedRef.current = false;
+          return;
+        }
 
-      for (const participant of response.participants) {
-        await createOfferTo(participant.id, participant);
-      }
+        setSelfId(response.self.id);
+        setJoined(true);
 
-      // Se estivermos compartilhando a tela localmente, precisamos também criar ofertas
-      // para que o participante sintético (meuid#screen) seja negociado com os demais.
-      if (localStreamRef.current && localStreamRef.current.getVideoTracks().length > 0) {
-        // Apenas criaremos ofertas para o canal 'screen' se o cliente estiver em modo de compartilhamento
-        // O consumo do stream de tela é feito por `setActiveVideoTrack` com um MediaStream.
-        // Não prossegue automaticamente aqui — a UI chama createOfferTo quando iniciar o screen share.
-      }
-    });
+        for (const participant of response.participants) {
+          await createOfferTo(participant.id, participant);
+        }
+      });
+    }
 
+    if (socket.connected) {
+      doJoin();
+    } else {
+      socket.once("connect", doJoin);
+      return () => socket.off("connect", doJoin);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, roomId, name, localStream, userId, avatar]);
 
@@ -227,10 +233,13 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
     }
 
     async function handleOffer({ from, offer, meta }) {
-      // `from` pode ser no formato 'socketId#screen' quando for um participante sintético
       const pc = getOrCreatePeerConnection(from, meta);
       attachLocalTracks(pc);
       try {
+        // Evita conflito de estado: só processa se não estiver no meio de uma negociação local
+        if (pc.signalingState !== "stable" && pc.signalingState !== "have-remote-offer") {
+          await pc.setLocalDescription({ type: "rollback" }).catch(() => {});
+        }
         await pc.setRemoteDescription(offer);
         await flushPendingCandidates(from, pc);
         const answer = await pc.createAnswer();
@@ -248,11 +257,12 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
     async function handleAnswer({ from, answer, meta }) {
       const pc = peerConnections.current.get(from);
       if (!pc) return;
-      // Atualiza metadados se chegaram junto com o answer
       if (meta) updateParticipant(from, { name: meta.name, avatar: meta.avatar || null, userId: meta.userId || null });
       try {
-        await pc.setRemoteDescription(answer);
-        await flushPendingCandidates(from, pc);
+        if (pc.signalingState === "have-local-offer") {
+          await pc.setRemoteDescription(answer);
+          await flushPendingCandidates(from, pc);
+        }
       } catch {
         // Ignora
       }
@@ -361,15 +371,40 @@ export function useWebRTC({ socket, roomId, name, avatar, userId, localStream, i
     [socket]
   );
 
-  /** Troca a track (câmera <-> compartilhamento de tela, ou troca de dispositivo) em todas as conexões ativas */
+  /**
+   * Troca a track em todas as conexões ativas.
+   * Se não houver sender para o kind (peer entrou sem câmera), adiciona a track
+   * e renegocia via createOffer para que o remoto receba o novo stream.
+   */
   const replaceOutgoingTrack = useCallback((kind, newTrack) => {
-    peerConnections.current.forEach((pc) => {
+    peerConnections.current.forEach((pc, remoteId) => {
       const sender = pc.getSenders().find((s) => s.track && s.track.kind === kind);
       if (sender) {
         sender.replaceTrack(newTrack).catch(() => {});
+      } else if (newTrack) {
+        // Não havia sender — adiciona a track e renegocia
+        const stream = localStreamRef.current;
+        try {
+          pc.addTrack(newTrack, stream || new MediaStream([newTrack]));
+        } catch {
+          return;
+        }
+        // Renegocia
+        (async () => {
+          try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            const parts = String(remoteId).split("#");
+            const to = parts[0];
+            const channel = parts[1] || undefined;
+            socket.emit("offer", { to, offer: pc.localDescription, channel });
+          } catch {
+            // ignora falha pontual
+          }
+        })();
       }
     });
-  }, []);
+  }, [socket]);
 
   return {
     joined,

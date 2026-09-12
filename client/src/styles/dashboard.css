@@ -80,7 +80,7 @@
 
 .dash-tab.active {
   background: var(--gradient-aurora);
-  color: #0a0d16;
+  color: #06070f;
   font-weight: 600;
 }
 
@@ -172,7 +172,7 @@
   justify-content: center;
   font-size: 0.8rem;
   font-weight: 700;
-  color: #0a0d16;
+  color: #06070f;
   flex-shrink: 0;
   overflow: hidden;
 }
@@ -257,7 +257,7 @@
 
 .dm-msg.own .dm-bubble {
   background: var(--gradient-aurora-soft);
-  border: 1px solid rgba(124,92,252,0.3);
+  border: 1px solid rgba(139,111,255,0.28);
   border-radius: 14px 14px 4px 14px;
 }
 
@@ -295,7 +295,7 @@
   border-radius: 50%;
   border: none;
   background: var(--gradient-aurora);
-  color: #0a0d16;
+  color: #06070f;
   display: flex;
   align-items: center;
   justify-content: center;
