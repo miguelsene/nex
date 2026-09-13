@@ -4,13 +4,12 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { checkRoomExists, fetchIceConfig } from "../services/api.js";
 import { validateName, getInitials, buildInviteUrl } from "../utils/format.js";
 
-import { useMediaDevices } from "../hooks/useMediaDevices.js";
-import { useSocket } from "../hooks/useSocket.js";
-import { useWebRTC } from "../hooks/useWebRTC.js";
+import { useCallMedia } from "../hooks/useCallMedia.js";
+import { useCallSocket } from "../hooks/useCallSocket.js";
+import { useCallPeers } from "../hooks/useCallPeers.js";
 import { useSpeakingDetector } from "../hooks/useSpeakingDetector.js";
 import { useAuth } from "../hooks/useAuth.jsx";
 import { saveCallRecord, sendFriendRequest, getContacts } from "../services/social.js";
-import { resetSocket } from "../services/socket.js";
 
 import VideoGrid from "../components/VideoGrid.jsx";
 import CallControls from "../components/CallControls.jsx";
@@ -21,6 +20,7 @@ import SettingsModal from "../components/SettingsModal.jsx";
 import MusicPlayer from "../components/MusicPlayer.jsx";
 import NexLogo from "../components/NexLogo.jsx";
 import ThemePicker from "../components/ThemePicker.jsx";
+import { RemoteAudioLayer } from "../components/RemoteAudioLayer.jsx";
 
 export default function Room() {
   const { roomId } = useParams();
@@ -215,9 +215,11 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
   const { user } = useAuth();
   const callStartRef = useRef(Date.now());
 
-  const media = useMediaDevices();
-  const { socket, connectionState } = useSocket();
+  // Núcleo novo: mídia -> socket -> peers, nessa ordem.
+  const media = useCallMedia();
+  const { socket, state: connectionState, leave } = useCallSocket();
   const [iceServers, setIceServers] = useState(null);
+  const [iceReady, setIceReady] = useState(false);
 
   const [activePanel, setActivePanel] = useState(null); // null | 'chat' | 'participants'
   const [showInvite, setShowInvite] = useState(false);
@@ -269,7 +271,9 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
 
   useEffect(() => {
     media.setVideoQuality?.(callSettings.quality);
-  }, [callSettings.quality, media]);
+    // media muda de identidade? não — hook estável; só qualidade importa
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [callSettings.quality]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -337,7 +341,9 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
       if (event.type === "joined") { pushToast(`${event.name} entrou na chamada`); playSound("join"); }
       if (event.type === "left") { pushToast(`${event.name} saiu da chamada`); playSound("leave"); }
     },
-    [pushToast, playSound]
+    // pushToast/playSound estáveis (useCallback []), sem loop de listeners
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
   );
 
   const handleQuickReaction = useCallback((type) => {
@@ -352,12 +358,29 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
   }, [name, pushToast]);
 
   useEffect(() => {
+    let dead = false;
     fetchIceConfig()
-      .then((cfg) => setIceServers(cfg.iceServers))
-      .catch(() => setIceServers([{ urls: "stun:stun.l.google.com:19302" }]));
+      .then((cfg) => {
+        if (dead) return;
+        setIceServers(cfg.iceServers);
+        setIceReady(true);
+      })
+      .catch(() => {
+        if (dead) return;
+        setIceServers([{ urls: "stun:stun.l.google.com:19302" }]);
+        setIceReady(true);
+      });
+    return () => { dead = true; };
   }, []);
 
-  const webrtc = useWebRTC({
+  // 1) Mídia primeiro: aplica prefs ANTES de expor o stream.
+  //    Sem isso os peers recebem track com enabled=false (preto/mudo).
+  useEffect(() => {
+    media.start(mediaPrefs || { withMic: false, withCam: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const peers = useCallPeers({
     socket,
     roomId: normalizedRoomId,
     name,
@@ -368,48 +391,27 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
     onEvent: handleCallEvent,
   });
 
-  // Aplica preferências de mic/câmera da tela de pré-entrada
-  const mediaPrefsAppliedRef = useRef(false);
+  // 2) Join SÓ quando mídia + ICE prontos.
   useEffect(() => {
-    if (!media.localStream || mediaPrefsAppliedRef.current) return;
-    mediaPrefsAppliedRef.current = true;
-    const audioTrack = media.localStream.getAudioTracks()[0];
-    const videoTrack = media.localStream.getVideoTracks()[0];
-    if (audioTrack) {
-      const wantMic = mediaPrefs?.withMic ?? false;
-      if (audioTrack.enabled !== wantMic) media.toggleMic();
-    }
-    if (videoTrack) {
-      const wantCam = mediaPrefs?.withCam ?? false;
-      if (videoTrack.enabled !== wantCam) media.toggleCam();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [media.localStream]);
-
-  // Define a track de vídeo ativa assim que a câmera estiver pronta
-  useEffect(() => {
-    if (media.localStream && !media.isSharingScreen) {
-      const track = media.localStream.getVideoTracks()[0] || null;
-      webrtc.replaceOutgoingTrack("video", track);
-    }
+    if (media.ready && iceReady) peers.join();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [media.localStream]);
+  }, [media.ready, iceReady]);
 
   useSpeakingDetector(media.localStream, media.micOn, (isSpeaking) => {
     setLocalSpeaking(isSpeaking);
-    webrtc.broadcastSpeaking(isSpeaking);
+    peers.emit("speaking", { isSpeaking });
   });
 
   useEffect(() => {
     if (activePanel === "chat") setUnreadChat(0);
-  }, [activePanel, webrtc.messages.length]);
+  }, [activePanel, peers.messages.length]);
 
   useEffect(() => {
-    if (activePanel !== "chat" && webrtc.messages.length > 0) {
+    if (activePanel !== "chat" && peers.messages.length > 0) {
       setUnreadChat((prev) => prev + 1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [webrtc.messages.length]);
+  }, [peers.messages.length]);
 
   useEffect(() => {
     if (!participantMenu) return;
@@ -500,19 +502,15 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
 
   async function restoreCall() {
     setMinimizedState(false);
-    // Re-anexa o <video> local e ressincroniza a track de vídeo
-    // (câmera ou tela) nos senders que ficaram vivos durante o mini.
+    // Peers ficaram vivos no mini; só ressincroniza as tracks atuais.
     try {
-      const track = media.isSharingScreen
+      const track = media.sharing
         ? media.screenStream?.getVideoTracks()[0]
         : media.localStream?.getVideoTracks()[0];
-      if (track) await webrtc.replaceOutgoingTrack("video", track);
+      if (track) await peers.replaceTrack("video", track);
       const audioTrack = media.localStream?.getAudioTracks()[0];
-      if (audioTrack) await webrtc.replaceOutgoingTrack("audio", audioTrack);
-    } catch {
-      // Se algum sender falhou, a renegociação do replaceOutgoingTrack
-      // já recriou a oferta; nada mais a fazer aqui.
-    }
+      if (audioTrack) await peers.replaceTrack("audio", audioTrack);
+    } catch { /* noop */ }
   }
 
   function handleOpenParticipantMenu({ event, participant }) {
@@ -532,28 +530,28 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
   }
 
   async function handleToggleMic() {
-    const nextMicOn = !media.micOn;
-    const audioTrack = await media.toggleMic();
-    if (audioTrack) {
-      webrtc.replaceOutgoingTrack("audio", audioTrack);
-    }
-    if (!audioTrack) {
+    const next = !media.micOn;
+    const track = media.setMic(next);
+    if (!track && next) {
       pushToast("Não foi possível ativar o microfone.");
       return;
     }
-    webrtc.broadcastMicState(nextMicOn);
-    pushToast(nextMicOn ? "Microfone ligado" : "Microfone desligado");
+    if (track) await peers.replaceTrack("audio", track);
+    peers.emit("toggle-audio", { micOn: next });
+    pushToast(next ? "Microfone ligado" : "Microfone desligado");
   }
 
-  function handleToggleCam() {
+  async function handleToggleCam() {
     const next = !media.camOn;
-    media.toggleCam();
-    webrtc.broadcastCamState(next);
-    // Envia a track de vídeo para todos os peers (negocia se necessário)
-    const videoTrack = media.localStream?.getVideoTracks()[0] || null;
-    if (videoTrack) {
-      webrtc.replaceOutgoingTrack("video", videoTrack);
+    const track = media.setCam(next);
+    if (!track && next) {
+      pushToast("Não foi possível ativar a câmera.");
+      return;
     }
+    peers.emit("toggle-video", { camOn: next });
+    // Mesmo desligada, a track continua existindo (só enabled=false),
+    // então o remoto mostra avatar em vez de tela preta.
+    if (track) await peers.replaceTrack("video", track);
     pushToast(next ? "Câmera ligada" : "Câmera desligada");
   }
 
@@ -605,30 +603,31 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
   }, [isRecording, media.localStream, pushToast]);
 
   async function handleToggleScreenShare() {
-    if (media.isSharingScreen) {
+    if (media.sharing) {
       const camTrack = media.localStream?.getVideoTracks()[0] || null;
-      media.stopScreenShare();
-      webrtc.replaceOutgoingTrack("video", camTrack);
-      webrtc.broadcastScreenShareStop();
+      media.stopShare();
+      if (camTrack) await peers.replaceTrack("video", camTrack);
+      peers.emit("screen-share-stopped");
+      pushToast("Compartilhamento encerrado");
     } else {
-      const screenStream = await media.startScreenShare();
+      const screenStream = await media.startShare();
       if (!screenStream) return;
       const screenTrack = screenStream.getVideoTracks()[0];
-      webrtc.replaceOutgoingTrack("video", screenTrack);
-      webrtc.broadcastScreenShareStart();
-      // Para o compartilhamento quando o usuário clica em "Parar" no navegador
-      screenTrack.addEventListener("ended", () => {
+      if (screenTrack) await peers.replaceTrack("video", screenTrack);
+      peers.emit("screen-share-started");
+      pushToast("Compartilhando tela");
+      screenTrack.addEventListener("ended", async () => {
         const camTrack2 = media.localStream?.getVideoTracks()[0] || null;
-        webrtc.replaceOutgoingTrack("video", camTrack2);
-        webrtc.broadcastScreenShareStop();
+        if (camTrack2) await peers.replaceTrack("video", camTrack2);
+        peers.emit("screen-share-stopped");
       }, { once: true });
     }
   }
 
   async function handleSwitchCamera(deviceId) {
     const newTrack = await media.switchCamera(deviceId);
-    if (newTrack && !media.isSharingScreen) {
-      webrtc.replaceOutgoingTrack("video", newTrack);
+    if (newTrack && !media.sharing) {
+      await peers.replaceTrack("video", newTrack);
     }
     if (!newTrack) pushToast("Não foi possível trocar a câmera.");
   }
@@ -636,7 +635,7 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
   async function handleSwitchMicrophone(deviceId) {
     const newTrack = await media.switchMicrophone(deviceId);
     if (newTrack) {
-      webrtc.replaceOutgoingTrack("audio", newTrack);
+      await peers.replaceTrack("audio", newTrack);
       pushToast("Microfone alterado com sucesso.");
     } else {
       pushToast("Não foi possível trocar o microfone.");
@@ -650,14 +649,14 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
   function handleLeaveConfirmed() {
     setConfirmLeave(false);
     const durationSeconds = Math.floor((Date.now() - callStartRef.current) / 1000);
-    const participantNames = Array.from(webrtc.participants.values()).map((p) => p.name);
+    const participantNames = Array.from(peers.peers.values()).map((p) => p.name);
     if (user) {
       saveCallRecord(user.id, { roomId: normalizedRoomId, participants: participantNames, durationSeconds });
     }
     sessionStorage.setItem("nexa_last_room", JSON.stringify({ roomId: normalizedRoomId, name, at: Date.now() }));
-    socket.emit("leave-room");
+    peers.hangup();
+    leave();
     onEnded?.();
-    resetSocket();
     navigate("/");
   }
 
@@ -674,7 +673,7 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
     else pushToast(result.error || "Erro ao enviar pedido.");
   }
 
-  const remoteParticipants = useMemo(() => Array.from(webrtc.participants.values()), [webrtc.participants]);
+  const remoteParticipants = useMemo(() => Array.from(peers.peers.values()), [peers.peers]);
 
   const selfForGrid = useMemo(
     () => ({
@@ -682,46 +681,42 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
       name: `${name}`,
       avatar: user?.avatar || null,
       isLocal: true,
-      stream: media.isSharingScreen
+      stream: media.sharing
         ? (media.screenStream || media.localStream)
         : media.localStream,
       micOn: media.micOn,
       camOn: media.camOn,
-      isSharingScreen: media.isSharingScreen,
+      isSharingScreen: media.sharing,
       speaking: localSpeaking,
     }),
-    [name, user, media.localStream, media.screenStream, media.micOn, media.camOn, media.isSharingScreen, localSpeaking]
+    [name, user, media.localStream, media.screenStream, media.micOn, media.camOn, media.sharing, localSpeaking]
   );
 
   const inviteUrl = buildInviteUrl(normalizedRoomId);
 
-  // --- Estados de carregamento / erro de mídia ---
-  if (media.status === "requesting") {
+  // --- Portões de carregamento (ordem importa) ---
+  if (!media.ready) {
     return (
       <div className="full-screen-loader rpg-loader">
         <NexLogo size={76} />
         <div className="spinner" />
         <p>Solicitando acesso à câmera e ao microfone...</p>
+        {media.error && <div className="error-banner">{media.error}</div>}
       </div>
     );
   }
 
-  if (media.status === "error") {
+  if (!iceReady) {
     return (
       <div className="full-screen-loader rpg-loader">
         <NexLogo size={76} />
-        <div className="error-banner">
-          <i className="bi bi-exclamation-triangle-fill" />
-          {media.errorMessage}
-        </div>
-        <a href="/" className="btn btn-ghost">
-          Voltar para o início
-        </a>
+        <div className="spinner" />
+        <p>Preparando conexão...</p>
       </div>
     );
   }
 
-  if (!webrtc.joined && !webrtc.joinError) {
+  if (!peers.joined && !peers.joinError) {
     return (
       <div className="full-screen-loader rpg-loader">
         <NexLogo size={76} />
@@ -731,13 +726,13 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
     );
   }
 
-  if (webrtc.joinError) {
+  if (peers.joinError) {
     return (
       <div className="full-screen-loader rpg-loader">
         <NexLogo size={76} />
         <div className="error-banner">
           <i className="bi bi-exclamation-triangle-fill" />
-          {webrtc.joinError}
+          {peers.joinError}
         </div>
         <a href="/" className="btn btn-ghost">
           Voltar para o início
@@ -879,16 +874,16 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
 
         {activePanel === "chat" && (
           <Chat
-            messages={webrtc.messages}
-            selfId={webrtc.selfId}
-            onSend={webrtc.sendChatMessage}
+            messages={peers.messages}
+            selfId={peers.selfId}
+            onSend={peers.say}
             onClose={() => setActivePanel(null)}
           />
         )}
 
         <MusicPlayer
           socket={socket}
-          isHost={remoteParticipants.length === 0 || webrtc.selfId === Array.from(webrtc.participants.keys())[0]}
+          isHost={remoteParticipants.length === 0 || peers.selfId === Array.from(peers.peers.keys())[0]}
           onClose={() => setActivePanel(null)}
           visible={activePanel === "music"}
         />
@@ -897,7 +892,7 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
       <CallControls
         micOn={media.micOn}
         camOn={media.camOn}
-        isSharingScreen={media.isSharingScreen}
+        isSharingScreen={media.sharing}
         activePanel={activePanel}
         participantCount={remoteParticipants.length + 1}
         unreadChatCount={unreadChat}
@@ -917,26 +912,7 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
         onLeave={handleLeave}
       />
 
-      {/* Áudio remoto dedicado: os <video> do VideoGrid podem ser
-          desmontados/escondidos pelo CSS do .is-minimized; sem este <audio>
-          sempre montado, o som dos outros morre junto no minimizar. */}
-      <div className="remote-audio-layer" aria-hidden="true">
-        {remoteParticipants.map((p) => (
-          p.stream ? (
-            <audio
-              key={`remote-audio-${p.id}`}
-              autoPlay
-              playsInline
-              ref={(el) => {
-                if (el && p.stream && el.srcObject !== p.stream) {
-                  el.srcObject = p.stream;
-                  el.play().catch(() => {});
-                }
-              }}
-            />
-          ) : null
-        ))}
-      </div>
+      <RemoteAudioLayer peers={peers.peers} />
 
       {isMinimized && (
         <div className="mini-call glass-card">
