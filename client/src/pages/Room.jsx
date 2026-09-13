@@ -488,13 +488,31 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
     setShowInvite(false);
     setShowSettings(false);
     pushToast("Chamada minimizada");
+    // NÃO navega para fora: sair da rota desmonta CallExperience,
+    // o cleanup do useWebRTC fecha os RTCPeerConnections e o do
+    // useMediaDevices faz track.stop() — os outros passam a ver
+    // bloco preto e o áudio remoto morre junto com os <video>.
+    // Minimizar é só esconder a UI (classe .is-minimized);
+    // socket + peers + tracks continuam vivos.
     sessionStorage.setItem("nexa_active_call", JSON.stringify({ roomId: normalizedRoomId, name, at: Date.now() }));
-    navigate("/");
+    setMinimizedState(true);
   }
 
-  function restoreCall() {
+  async function restoreCall() {
     setMinimizedState(false);
-    navigate(`/room/${normalizedRoomId}`, { state: { name } });
+    // Re-anexa o <video> local e ressincroniza a track de vídeo
+    // (câmera ou tela) nos senders que ficaram vivos durante o mini.
+    try {
+      const track = media.isSharingScreen
+        ? media.screenStream?.getVideoTracks()[0]
+        : media.localStream?.getVideoTracks()[0];
+      if (track) await webrtc.replaceOutgoingTrack("video", track);
+      const audioTrack = media.localStream?.getAudioTracks()[0];
+      if (audioTrack) await webrtc.replaceOutgoingTrack("audio", audioTrack);
+    } catch {
+      // Se algum sender falhou, a renegociação do replaceOutgoingTrack
+      // já recriou a oferta; nada mais a fazer aqui.
+    }
   }
 
   function handleOpenParticipantMenu({ event, participant }) {
@@ -899,6 +917,27 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
         onLeave={handleLeave}
       />
 
+      {/* Áudio remoto dedicado: os <video> do VideoGrid podem ser
+          desmontados/escondidos pelo CSS do .is-minimized; sem este <audio>
+          sempre montado, o som dos outros morre junto no minimizar. */}
+      <div className="remote-audio-layer" aria-hidden="true">
+        {remoteParticipants.map((p) => (
+          p.stream ? (
+            <audio
+              key={`remote-audio-${p.id}`}
+              autoPlay
+              playsInline
+              ref={(el) => {
+                if (el && p.stream && el.srcObject !== p.stream) {
+                  el.srcObject = p.stream;
+                  el.play().catch(() => {});
+                }
+              }}
+            />
+          ) : null
+        ))}
+      </div>
+
       {isMinimized && (
         <div className="mini-call glass-card">
           <div className="mini-call-info">
@@ -909,10 +948,13 @@ export function CallExperience({ roomId, name, minimized = false, mediaPrefs, on
             </div>
           </div>
           <div className="mini-call-actions">
-            <button type="button" className="icon-btn" data-tooltip="Início" onClick={() => openAppPage("/")}>
+            {/* Abrir Início/Painel em nova aba: navegar na mesma aba
+                desmontaria a sala e mataria peers + tracks (bloco preto).
+                openAppPage já usa window.open, então a chamada continua aqui. */}
+            <button type="button" className="icon-btn" data-tooltip="Início (nova aba)" onClick={() => openAppPage("/")}>
               <i className="bi bi-house-fill" />
             </button>
-            <button type="button" className="icon-btn" data-tooltip="Painel" onClick={() => openAppPage("/dashboard")}>
+            <button type="button" className="icon-btn" data-tooltip="Painel (nova aba)" onClick={() => openAppPage("/dashboard")}>
               <i className="bi bi-grid-fill" />
             </button>
             <button type="button" className="icon-btn" data-tooltip="Restaurar" onClick={restoreCall}>

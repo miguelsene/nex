@@ -798,6 +798,19 @@ a:focus-visible {
 .room.is-minimized .mini-call,
 .room.is-minimized .modal-overlay { pointer-events: auto; }
 
+/* Camada de áudio remoto: invisível, mas NUNCA display:none —
+   esconder com display:none pode pausar o <audio> em alguns
+   navegadores e matar o som no minimizar. */
+.remote-audio-layer {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
 /* --- Context menu --- */
 .participant-context-menu {
   position: fixed;
